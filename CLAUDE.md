@@ -1,0 +1,231 @@
+# CLAUDE.md — agent operating guide for FFCM.jl
+
+This file tells Claude (and any other coding agent) how to work on this
+repository. Read it before doing anything else here.
+
+## 1. What this package is
+
+FFCM.jl is a Julia implementation of the Fast Force-Coupling Method (FFCM)
+for hydrodynamic interactions between rigid particles in a triply-periodic
+Stokes flow, following Su & Keaveny (2024), *J. Comput. Phys.* 510, 113060.
+
+As rigid spherical particles can be viewed as regularised markers on an immersed-boundary
+type of method to solve fluid-structure interaction, it is also useful to view FFCM as a
+particular approximation to the mobility operator $\mathcal{M}^{\mathcal{V}\mathcal{F}}$
+that maps a finite number of forces $\mathcal{F}$ localised at positions $\mathcal{Y}$ to
+their corresponding velocities $\mathcal{V}$ if they interact hydrodynamically via the
+Stokes equation.
+
+The package exposes a plug-and-play mobility operator
+
+```julia
+mobility!(V, config, Y, F)   # Y, F: 3×N arrays; particles have unit radius
+```
+
+with two backends:
+
+- **CPU**: `Base.Threads` + FFTW, lives entirely in `src/`.
+- **CUDA (NVIDIA GPUs)**: lives in `ext/cuFFCM/` and loads as a package
+  extension only when the user has `CUDA.jl` in their environment.
+
+The intended downstream use is an iterative resistance solver that applies
+the mobility operator many times per linear solve, so the hot path is
+allocation-free and the GPU backend hides device traffic from callers.
+
+## 2. Ground rules
+
+1. **The paper is the spec.** Notation, equations, and parameter meanings
+   in this codebase follow Su & Keaveny (2024). The mapping between paper
+   symbols and code identifiers lives in
+   [spec/notation.md](spec/notation.md).
+
+2. **`racksa/cuFCM` is a *reference* for implementation.** This repository is the
+   original C++/CUDA implementation of FFCM by the paper's author. You may
+   read it to learn memory-layout, cell-list, and FFT-orchestration tricks
+   for GPU.
+
+3. **`spec/` is the source of truth for *what the code does*.** The paper is the
+   source of truth for *why*; `spec/` cites the paper by section/equation
+   rather than restating derivations. No new public API or algorithmic
+   component is added without (a) an updated `spec/*.md` and (b) a failing
+   test that drove the implementation (see §5).
+
+4. **Hot-path code is allocation-free.** Any function reachable from
+   `mobility!` after the `config` is built must not allocate on the heap.
+   The `test/api/test_allocations.jl` suite enforces this with
+   `BenchmarkTools.@ballocated`.
+
+5. **Float32 is the default; Float64 must also work.** Code is
+   type-parametric on a `T <: AbstractFloat`. Tolerances in tests scale
+   with `T` (baseline `reltol = sqrt(eps(T))`; relax per test with a documented
+   numerical reason).
+
+6. **CPU first, CUDA second.** A new feature is implemented and tested on
+   `CPUBackend` before any CUDA work begins. Once the CPU version passes
+   its accuracy tests, the CUDA implementation must pass a CPU↔CUDA parity
+   test before it is considered done.
+
+7. **Each change leaves the design a little clearer.** Every PR-sized
+   piece of work should improve at least one abstraction, remove one
+   piece of complexity, or tighten one comment, in addition to its
+   stated task. (Git workflow itself is the user's domain; this rule
+   is about the code, not the commits.)
+
+## 3. Design boundaries
+
+The FFCM state object is called `config` (e.g. `FFCMConfig`). It owns
+both user-set parameters and compiled state.
+
+**Two-phase public API.**
+
+- **Cold path** — construction and tuning: `FFCMConfig(...)`, parameter
+  accessors, and any rebuild helpers triggered by a grid or particle-count
+  change. Allocations are fine here; ergonomics matter.
+- **Hot path** — operator action: `mobility!(V, config, Y, F)` only.
+  This is the single call made per iteration of the downstream iterative
+  solver. It is allocation-free and type-stable. Do **not** add
+  logging-decorated variants, default-config helpers, or any wrapper that
+  bypasses `config` on the hot path.
+
+This is the deep-module design: `config` plus `mobility!` together hide
+spreading, FFT, Stokes solve, real-space correction, and interpolation
+behind one cold constructor and one hot call.
+
+**Matrix-free `mul!` interface.** `config` plus `mobility!` together
+implement (or trivially adapt to via a thin operator wrapper that closes
+over `config` and `Y`) the `LinearAlgebra` operator interface:
+
+```julia
+mul!(V, M, F)               # 3-arg
+mul!(V, M, F, α, β)         # 5-arg: V .= α*M*F + β*V
+```
+
+where `M` is the matrix-free mobility operator backed by `config`. This
+lets the operator drop straight into `IterativeSolvers.gmres!`,
+`KrylovKit.linsolve`, or any solver that takes a `mul!`-compatible
+linear map, without a separate adapter at the call site.
+
+## 4. Performance discipline
+
+- Default to `@inbounds` only where bounds have been proved safe by a
+  prior assertion or explicit loop range.
+- Add `@simd` and `@inline` only after a benchmark shows the bottleneck.
+- For CUDA, hand-write `@cuda` kernels. Specific kernel-level choices
+  (shared-memory tiling, atomics policy, register pressure) are
+  benchmark-driven and live in
+  [spec/cuda-conventions.md](spec/cuda-conventions.md) as they are
+  validated. The only universal CUDA rule is the boundary one (§7): CUDA
+  appears in `ext/`, never in `src/`.
+- The benchmark suite in `bench/` is the regression detector. Run it
+  before claiming a perf improvement.
+- **Type stability is strict.** No abstract types in struct fields; no
+  non-`const` globals captured by hot-path functions. Every public
+  hot-path function must pass `Test.@inferred` in tests; whole-module
+  dispatch and inference health is audited with **JET.jl** (a `test`
+  extra in `Project.toml`). Allocation count (§2 rule 4) and inference
+  (this rule) are two separate guarantees — both must be pinned.
+- **Data layout.** Use `StructArrays.jl` for collections of physical
+  entities — preserves per-particle readability (`particles[i]` returns
+  the typed unit) while giving Struct-of-Arrays memory layout for
+  SIMD-over-particles. Flat-vector adapters live at LinAlg API
+  boundaries (e.g. `mul!`). Specific layout choices and the cost of any
+  AoS↔SoA shuffles belong in the relevant `spec/*.md` file.
+
+## 5. Tests
+
+**Order of operations for any new public API** (TDD):
+
+1. Spec stub in `spec/` describing the contract.
+2. A **failing** test pinning the behavior — typically an analytical case
+   (single-sphere Stokes drag, periodic two-sphere pair, a known
+   reference sum) asserted at `sqrt(eps(T))` tolerance.
+3. Implementation, until the test goes green.
+
+The test must exist *before* the code, not alongside it. A test added
+after the implementation can only confirm what the code does; the
+failing-test-first discipline forces the contract to be written down
+before the implementation biases it.
+
+**Test taxonomy** (four buckets under `test/`):
+
+- `unit/` — small, focused checks on individual functions and types.
+- `accuracy/` — paper-derived or analytical correctness tests at the
+  documented tolerance.
+- `api/` — boundary checks: allocation count via
+  `BenchmarkTools.@ballocated`, type stability via `Test.@inferred`, and
+  method ambiguities / unbound type parameters / stale `[deps]` via
+  **Aqua.jl**.
+- `cuda/` — CPU↔CUDA parity tests, only run when CUDA is loadable.
+
+`Aqua.jl` audits package hygiene; **JET.jl** audits dispatch and
+inference. Both are `test` extras in `Project.toml`.
+
+## 6. What to mine from cuFCM
+
+The C++/CUDA reference is at <https://github.com/racksa/cuFCM>. Files
+worth reading (and what to take from each):
+
+- `src/CUFCM_FCM.cuh`: the active implementations of each sub-algorithm
+  are uncommented; alternative or dead variants nearby are commented out
+  and should be ignored.
+- `src/CUFCM_FCM.cu`: spreading and interpolation kernel structure. Look
+  at how it tiles per particle and uses shared memory for the local grid
+  patch.
+- `src/CUFCM_CELLLIST.cu`: GPU cell list build / lookup pattern.
+- `src/CUFCM_CORRECTION.cu`: real-space pairwise correction layout.
+- `src/CUFCM_SOLVER.cu`: orchestration — how FFT, spreading, correction,
+  and interpolation are sequenced and what stays on device.
+
+**Do not** copy their identifiers (`σ` is called something else there),
+file names, or class layout into our code. The paper notation rules.
+
+## 7. Don'ts
+
+- Don't introduce abstractions for hypothetical second use cases.
+- Don't half-implement: a function either does its documented job and
+  has a passing test, or it `error("not yet implemented")`s.
+- Don't import CUDA from `src/`. CUDA only appears in `ext/`.
+- Don't add a new public API symbol without a `spec/` document and a
+  failing test that drove the implementation (§5).
+- Don't generate docs that claim functionality that isn't tested.
+
+## 8. Style
+
+- Use [Blue style](https://github.com/JuliaDiff/BlueStyle): 92-character line
+  limit, 4-space indent, trailing commas on multi-line collections and calls.
+- When a function call or signature would exceed 92 characters, wrap it using
+  the **first** of these stages that fits. Do not skip stages.
+
+  **Stage 0** — fits under 92 characters; do not wrap:
+```julia
+  func(arg1, arg2; kw1 = 1, kw2 = 2)
+```
+
+  **Stage 1** — all arguments on one wrapped line:
+```julia
+  func(
+      arg1, arg2; kw1 = 1, kw2 = 2,
+  )
+```
+
+  **Stage 2** — positional and keyword arguments on separate lines:
+```julia
+  func(
+      arg1, arg2;
+      kw1 = 1, kw2 = 2,
+  )
+```
+
+  **Stage 3** — one argument per line:
+```julia
+  func(
+      arg1,
+      arg2;
+      kw1 = 1,
+      kw2 = 2,
+  )
+```
+
+  The opening parenthesis stays on the original line. The closing parenthesis
+  sits on its own line at the call's indent. The same staging applies to
+  function definitions.
