@@ -25,6 +25,18 @@ end
     @test config.num_cells == (Int32(3), Int32(3), Int32(3))
 end
 
+@testset "Cell-list buffers are sized for the particle and cell counts" begin
+    N = 10
+    config = FFCMConfig{Float64}(; L = (4.0, 6.0, 8.0), R_c = 1.0, N = N)
+    total = prod(Int(c) for c in config.num_cells)
+    @test length(config.original_index) == N
+    @test length(config.cell_start) == total
+    @test length(config.cell_end) == total
+    @test length(config.cell_cursor) == total
+    @test size(config.Y_sorted) == (3, N)
+    @test size(config.F_sorted) == (3, N)
+end
+
 @testset "Constructor rejects non-physical inputs" begin
     @test_throws ArgumentError FFCMConfig{Float64}(;
         L = (4.0, 4.0, 4.0), R_c = 0.0, N = 1,
