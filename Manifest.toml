@@ -1,0 +1,7 @@
+# This file is machine-generated - editing it directly is not advised
+
+julia_version = "1.11.5"
+manifest_format = "2.0"
+project_hash = "5ff6f64b99778c46e7ffc75785b58a940b08de7d"
+
+[deps]

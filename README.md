@@ -23,7 +23,7 @@ dependency for CPU users):
 
 ## Reference implementation
 
-A CUDA/C++ reference, [`cuFCM`](https://github.com/racksa/cuFCM_demo),
+A CUDA/C++ reference, [`cuFCM`](https://github.com/racksa/cuFCM),
 is used for performance hints (memory layout, cell-list, FFT
 orchestration). Its naming and code style differ from the paper; this
 package follows the paper.
@@ -32,6 +32,6 @@ package follows the paper.
 
 MIT — see [LICENSE](LICENSE).
 
-## LLM Assistance
+## LLM assistance
 
-This repository was coded with the assistance of `claude-opus-4.7` and `claude-sonnet-4.6`.
+This repository was written with assistance of `claude-4.7-opus` and `claude-4.6-sonnet`. [CLAUDE.md](CLAUDE.md) serves as agentic guidance for this project.
