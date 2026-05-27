@@ -18,6 +18,124 @@ function wrap_positions!(Y::AbstractMatrix{T}, L::NTuple{3, T}) where {T}
 end
 
 """
+    _build_cell_list_kernel!(
+        original_index, cell_start, cell_end, cell_cursor, cell_hash,
+    ) -> original_index
+
+Function-barrier kernel that counting-sorts the `N` particles by their
+0-based `cell_hash` into `original_index` (sorted slot `s` → original
+particle index `n`, read as `n = original_index[s]`), and fills the
+per-cell 1-based inclusive index ranges `cell_start[c] : cell_end[c]` into
+the sorted order, for cells `c ∈ 0:total-1` stored at array index `c + 1`.
+
+The sort is stable: particles sharing a cell keep their original relative
+order. An empty cell `c` yields `cell_end[c] = cell_start[c] - 1`, i.e. an
+empty range. `cell_cursor` is length-`total` scratch.
+
+Preconditions (the caller guarantees these, so the loops are `@inbounds`):
+`cell_hash[n] ∈ 0:total-1` for every particle `n`, where
+`total = length(cell_start)`; `original_index` has length `N`;
+`cell_start`, `cell_end`, `cell_cursor` all have length `total`.
+
+See `spec/particle-sorting.md`.
+"""
+function _build_cell_list_kernel!(
+    original_index::Vector{Int32},
+    cell_start::Vector{Int32},
+    cell_end::Vector{Int32},
+    cell_cursor::Vector{Int32},
+    cell_hash::Vector{Int32},
+)
+    total = length(cell_start)
+    fill!(cell_cursor, Int32(0))
+    @inbounds for n in eachindex(cell_hash)
+        cell_cursor[cell_hash[n] + Int32(1)] += Int32(1)
+    end
+    acc = Int32(1)
+    @inbounds for c in 1:total
+        cell_start[c] = acc
+        acc += cell_cursor[c]
+        cell_end[c] = acc - Int32(1)
+        cell_cursor[c] = cell_start[c]
+    end
+    @inbounds for n in eachindex(cell_hash)
+        c = cell_hash[n] + Int32(1)
+        original_index[cell_cursor[c]] = Int32(n)
+        cell_cursor[c] += Int32(1)
+    end
+    return original_index
+end
+
+"""
+    sort_particles_by_cell!(config, Y, F) -> config
+
+Step 2 of the Fast FCM algorithm (Su & Keaveny 2024, §4). Counting-sorts the
+particles by their cell hash and gathers their positions and forces into
+that sorted order, so that particles sharing a cell are contiguous in
+memory. On return, `config` holds:
+
+- `config.original_index` — sorted slot `s` → original particle index.
+- `config.cell_start[c+1] : config.cell_end[c+1]` — 1-based inclusive range
+  of sorted slots occupied by cell `c` (empty range if the cell is empty).
+- `config.Y_sorted`, `config.F_sorted` — `Y` and `F` in sorted order.
+
+Assumes `config.cell_hash` is current, i.e. `assign_cells!(config, Y)` ran
+since `Y` last changed. Allocation-free and type-stable on `T`.
+
+See `spec/particle-sorting.md`.
+"""
+function sort_particles_by_cell!(
+    config::FFCMConfig{T}, Y::AbstractMatrix{T}, F::AbstractMatrix{T},
+) where {T}
+    _build_cell_list_kernel!(
+        config.original_index,
+        config.cell_start,
+        config.cell_end,
+        config.cell_cursor,
+        config.cell_hash,
+    )
+    _gather_particles_kernel!(
+        config.Y_sorted, config.F_sorted, Y, F, config.original_index,
+    )
+    return config
+end
+
+"""
+    _gather_particles_kernel!(Y_sorted, F_sorted, Y, F, original_index)
+        -> Y_sorted
+
+Function-barrier kernel that gathers the `3×N` positions `Y` and forces `F`
+into sorted order under the permutation `original_index`, writing
+`Y_sorted[:, s] = Y[:, original_index[s]]` and likewise for `F`. This puts
+particles sharing a cell into contiguous columns, the memory locality the
+paper's step 2 exists to provide.
+
+Preconditions (caller-guaranteed, so the loop is `@inbounds`): all five
+arrays have second dimension `N = length(original_index)`; `Y`, `F`,
+`Y_sorted`, `F_sorted` have first dimension 3; `original_index[s] ∈ 1:N`.
+
+See `spec/particle-sorting.md`.
+"""
+function _gather_particles_kernel!(
+    Y_sorted::AbstractMatrix{T},
+    F_sorted::AbstractMatrix{T},
+    Y::AbstractMatrix{T},
+    F::AbstractMatrix{T},
+    original_index::Vector{Int32},
+) where {T}
+    @inbounds for s in eachindex(original_index)
+        n = original_index[s]
+        Y_sorted[1, s] = Y[1, n]
+        Y_sorted[2, s] = Y[2, n]
+        Y_sorted[3, s] = Y[3, n]
+        F_sorted[1, s] = F[1, n]
+        F_sorted[2, s] = F[2, n]
+        F_sorted[3, s] = F[3, n]
+    end
+    return Y_sorted
+end
+
+"""
     assign_cells!(config, Y) -> config.cell_hash
 
 Write each particle's cell index into `config.cell_hash`. Assumes `Y` has

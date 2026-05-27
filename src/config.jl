@@ -17,6 +17,12 @@ struct FFCMConfig{T <: AbstractFloat}
     cell_size::NTuple{3, T}
     inv_cell_size::NTuple{3, T}
     cell_hash::Vector{Int32}
+    original_index::Vector{Int32}
+    cell_start::Vector{Int32}
+    cell_end::Vector{Int32}
+    cell_cursor::Vector{Int32}
+    Y_sorted::Matrix{T}
+    F_sorted::Matrix{T}
 end
 
 function FFCMConfig{T}(;
@@ -31,5 +37,25 @@ function FFCMConfig{T}(;
     cell_size = ntuple(i -> L[i] / num_cells[i], 3)
     inv_cell_size = ntuple(i -> one(T) / cell_size[i], 3)
     cell_hash = Vector{Int32}(undef, N)
-    return FFCMConfig{T}(L, R_c, num_cells, cell_size, inv_cell_size, cell_hash)
+    num_cells_total = prod(Int, num_cells)
+    original_index = Vector{Int32}(undef, N)
+    cell_start = Vector{Int32}(undef, num_cells_total)
+    cell_end = Vector{Int32}(undef, num_cells_total)
+    cell_cursor = Vector{Int32}(undef, num_cells_total)
+    Y_sorted = Matrix{T}(undef, 3, N)
+    F_sorted = Matrix{T}(undef, 3, N)
+    return FFCMConfig{T}(
+        L,
+        R_c,
+        num_cells,
+        cell_size,
+        inv_cell_size,
+        cell_hash,
+        original_index,
+        cell_start,
+        cell_end,
+        cell_cursor,
+        Y_sorted,
+        F_sorted,
+    )
 end
