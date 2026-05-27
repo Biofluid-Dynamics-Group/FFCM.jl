@@ -1,5 +1,8 @@
 module FFCM
 
-greet() = print("Hello World!")
+include("config.jl")
+include("cell_list.jl")
 
-end # module FFCM
+export FFCMConfig
+
+end
