@@ -9,7 +9,9 @@ using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!
 @testset "Hot-path passes do not allocate" begin
     for T in (Float32, Float64)
         L = (T(4), T(6), T(8))
-        config = FFCMConfig{T}(; L = L, R_c = T(1), N = 256)
+        config = FFCMConfig{T}(;
+            L = L, R_c = T(1), N = 256, _fcm_grid_kwargs(L)...,
+        )
         Y = rand(T, 3, 256) .* T(4)
         @test (@ballocated wrap_positions!($Y, $(config.L))) == 0
         @test (@ballocated assign_cells!($config, $Y)) == 0

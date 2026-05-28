@@ -8,7 +8,10 @@ using FFCM: sort_particles_by_cell!, _build_cell_list_kernel!,
 @testset "Step-2 entry points are type-stable for Float32 and Float64" begin
     for T in (Float32, Float64)
         N = 16
-        config = FFCMConfig{T}(; L = (T(4), T(6), T(8)), R_c = T(1), N = N)
+        L = (T(4), T(6), T(8))
+        config = FFCMConfig{T}(;
+            L = L, R_c = T(1), N = N, _fcm_grid_kwargs(L)...,
+        )
         Y = rand(T, 3, N) .* T(4)
         F = rand(T, 3, N)
         assign_cells!(config, Y)

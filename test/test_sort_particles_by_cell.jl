@@ -89,7 +89,10 @@ end
 @testset "Wrapping, hashing, then sorting groups a random cloud by cell" begin
     for T in (Float32, Float64)
         N = 1000
-        config = FFCMConfig{T}(; L = (T(4), T(6), T(8)), R_c = T(1), N = N)
+        L = (T(4), T(6), T(8))
+        config = FFCMConfig{T}(;
+            L = L, R_c = T(1), N = N, _fcm_grid_kwargs(L)...,
+        )
         Y = [config.L[i] * rand(T) for i in 1:3, _ in 1:N]
         F = rand(T, 3, N)
         wrap_positions!(Y, config.L)

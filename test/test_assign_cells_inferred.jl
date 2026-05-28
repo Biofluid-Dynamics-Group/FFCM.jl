@@ -8,7 +8,9 @@ using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!
 @testset "Hot-path entry points are type-stable for Float32 and Float64" begin
     for T in (Float32, Float64)
         L = (T(4), T(6), T(8))
-        config = FFCMConfig{T}(; L = L, R_c = T(1), N = 16)
+        config = FFCMConfig{T}(;
+            L = L, R_c = T(1), N = 16, _fcm_grid_kwargs(L)...,
+        )
         Y = rand(T, 3, 16) .* T(4)
         @inferred wrap_positions!(Y, config.L)
         @inferred assign_cells!(config, Y)
