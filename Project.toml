@@ -3,10 +3,16 @@ uuid = "7a5e5976-cca4-4592-9cc6-b4f5aae2794e"
 authors = ["pzuritas <p.zurita23@imperial.ac.uk>"]
 version = "0.1.0"
 
+[deps]
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
+
 [compat]
 Aqua = "0.8.14"
 BenchmarkTools = "1.8.0"
 JET = "0.9.20"
+StaticArrays = "1.9.18"
+StructArrays = "0.7.3"
 Test = "1.11.0"
 julia = "1.11.5"
 
