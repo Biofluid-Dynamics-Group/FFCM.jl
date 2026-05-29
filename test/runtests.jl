@@ -11,6 +11,7 @@ function _fcm_grid_kwargs(L::NTuple{3, T}) where {T}
         Σ_over_σ = T(2),
         num_grid_points = ntuple(i -> Int32(round(Int, L[i] / Δx_target)), 3),
         M_G = 8,
+        μ = T(1),
     )
 end
 
@@ -28,6 +29,9 @@ end
     include("test_spread_forces.jl")
     include("test_spread_forces_inferred.jl")
     include("test_spread_forces_allocations.jl")
+    include("test_stokes_solve.jl")
+    include("test_stokes_solve_inferred.jl")
+    include("test_stokes_solve_allocations.jl")
     include("test_aqua.jl")
     include("test_jet.jl")
 end

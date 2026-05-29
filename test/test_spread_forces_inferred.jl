@@ -11,6 +11,7 @@ using FFCM: spread_forces!, _spread_forces_kernel!
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8,
         )

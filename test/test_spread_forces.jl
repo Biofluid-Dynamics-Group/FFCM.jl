@@ -14,6 +14,7 @@ using StructArrays: components
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -57,6 +58,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 4,
         )
@@ -103,6 +105,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )
@@ -148,6 +151,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )
@@ -191,6 +195,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -230,6 +235,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -273,6 +279,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
             Σ_over_σ = T(2),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = M_G,
         )
@@ -318,6 +325,7 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
             Σ_over_σ = T(1),
+            μ = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )

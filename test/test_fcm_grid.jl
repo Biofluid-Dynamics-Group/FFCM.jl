@@ -12,6 +12,7 @@ const _DEFAULT_KWARGS = (;
     Σ_over_σ = 2.0,
     num_grid_points = (Int32(8), Int32(8), Int32(8)),
     M_G = 8,
+    μ = 1.0,
 )
 
 @testset "Hydrodynamic radius defaults to one (CLAUDE.md unit-radius contract)" begin
@@ -124,6 +125,7 @@ end
         Σ_over_σ = 2.0f0,
         num_grid_points = (Int32(8), Int32(8), Int32(8)),
         M_G = 8,
+        μ = 1.0f0,
     )
     @test config.σ ≈ 1.0f0 / sqrt(Float32(π))
     @test config.Σ ≈ 2.0f0 * config.σ
