@@ -92,39 +92,20 @@ function _spread_forces_kernel!(
     inv_norm = one(T) / sqrt(T(2) * T(π) * Σ²)
     inv_2Σ² = one(T) / (T(2) * Σ²)
 
-    M_x, M_y, M_z = num_grid_points
     ngdh = M_G ÷ Int32(2)
 
     @inbounds for s in axes(Y_sorted, 2)
-        Y1 = Y_sorted[1, s]
-        Y2 = Y_sorted[2, s]
-        Y3 = Y_sorted[3, s]
         F1 = F_sorted[1, s]
         F2 = F_sorted[2, s]
         F3 = F_sorted[3, s]
 
-        j1 = round(Int32, Y1 * inv_Δx)
-        j2 = round(Int32, Y2 * inv_Δx)
-        j3 = round(Int32, Y3 * inv_Δx)
-
-        @inbounds for k in Int32(1):M_G
-            offset = k - Int32(1) - ngdh
-            g1 = j1 + offset
-            g2 = j2 + offset
-            g3 = j3 + offset
-            x1 = T(g1) * Δx - Y1
-            x2 = T(g2) * Δx - Y2
-            x3 = T(g3) * Δx - Y3
-            gauss_x[k] = inv_norm * exp(-x1 * x1 * inv_2Σ²)
-            gauss_y[k] = inv_norm * exp(-x2 * x2 * inv_2Σ²)
-            gauss_z[k] = inv_norm * exp(-x3 * x3 * inv_2Σ²)
-            r²_x[k] = x1 * x1
-            r²_y[k] = x2 * x2
-            r²_z[k] = x3 * x3
-            ind_x[k] = mod(g1, M_x) + Int32(1)
-            ind_y[k] = mod(g2, M_y) + Int32(1)
-            ind_z[k] = mod(g3, M_z) + Int32(1)
-        end
+        _fill_particle_stencil!(
+            gauss_x, gauss_y, gauss_z,
+            r²_x, r²_y, r²_z,
+            ind_x, ind_y, ind_z,
+            Y_sorted[1, s], Y_sorted[2, s], Y_sorted[3, s],
+            inv_norm, inv_2Σ², Δx, inv_Δx, num_grid_points, M_G, ngdh,
+        )
 
         @inbounds for kz in Int32(1):M_G
             iz = ind_z[kz]
