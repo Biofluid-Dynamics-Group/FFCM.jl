@@ -57,8 +57,14 @@ allocation-free and the GPU backend hides device traffic from callers.
 
 5. **Float32 is the default; Float64 must also work.** Code is
    type-parametric on a `T <: AbstractFloat`. Tolerances in tests scale
-   with `T` (baseline `reltol = sqrt(eps(T))`; relax per test with a documented
-   numerical reason).
+   with `T`. `sqrt(eps(T))` is the baseline **relative** tolerance only;
+   use it for `rtol` when comparing to a non-zero reference. For quantities
+   that should be `≈ 0`, or where a relative tolerance is ill-defined, use
+   an **absolute** tolerance: `atol = 1e-10` for `Float64`, `1e-6` for
+   `Float32` (≈ `rtol/100`). Combine both (`isapprox(a, b; rtol, atol)`)
+   when an array mixes large and near-zero entries. Truncation-dominated
+   tests use the documented physical-error tolerance, not the round-off
+   one. Relax any tolerance only with a documented numerical reason.
 
 6. **CPU first, CUDA second.** A new feature is implemented and tested on
    `CPUBackend` before any CUDA work begins. Once the CPU version passes
