@@ -32,6 +32,10 @@ end
     include("test_stokes_solve.jl")
     include("test_stokes_solve_inferred.jl")
     include("test_stokes_solve_allocations.jl")
+    include("test_interpolate_velocities.jl")
+    include("test_interpolate_velocities_inferred.jl")
+    include("test_interpolate_velocities_allocations.jl")
+    include("test_single_sphere_mobility.jl")
     include("test_aqua.jl")
     include("test_jet.jl")
 end
