@@ -30,7 +30,7 @@ throws `ArgumentError` otherwise.
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`,
 `spec/force-spreading.md`.
 """
-struct FFCMConfig{T <: AbstractFloat, FG}
+struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdPlan, BwdPlan}
     L::NTuple{3, T}
     R_c::T
     num_cells::NTuple{3, Int32}
@@ -60,6 +60,14 @@ struct FFCMConfig{T <: AbstractFloat, FG}
     ind_x::Vector{Int32}
     ind_y::Vector{Int32}
     ind_z::Vector{Int32}
+    μ::T
+    velocity_grid::FG
+    fluid_hat::FH
+    k_x::Vector{T}
+    k_y::Vector{T}
+    k_z::Vector{T}
+    forward_plan::FwdPlan
+    backward_plan::BwdPlan
 end
 
 function FFCMConfig{T}(;
@@ -70,6 +78,7 @@ function FFCMConfig{T}(;
     Σ_over_σ::T,
     num_grid_points::NTuple{3, Int32},
     M_G::Integer,
+    μ::T,
 ) where {T <: AbstractFloat}
     R_c > zero(T) || throw(ArgumentError("R_c must be positive"))
     all(>(zero(T)), L) || throw(ArgumentError("L components must be positive"))
@@ -82,6 +91,10 @@ function FFCMConfig{T}(;
     M_G ≥ 2 || throw(ArgumentError("M_G must be at least 2; got $(M_G)"))
     all(≥(Int32(1)), num_grid_points) ||
         throw(ArgumentError("num_grid_points components must each be ≥ 1"))
+    μ > zero(T) || throw(ArgumentError(
+        "μ must be positive (paper §2 eq 152 requires a positive viscosity); " *
+        "got μ = $(μ)",
+    ))
 
     num_cells = ntuple(i -> max(floor(Int32, L[i] / R_c), Int32(3)), 3)
     cell_size = ntuple(i -> L[i] / num_cells[i], 3)
@@ -126,7 +139,38 @@ function FFCMConfig{T}(;
     ind_y = Vector{Int32}(undef, M_G_i32)
     ind_z = Vector{Int32}(undef, M_G_i32)
 
-    return FFCMConfig{T, typeof(force_grid)}(
+    ux = zeros(T, M_x, M_y, M_z)
+    uy = zeros(T, M_x, M_y, M_z)
+    uz = zeros(T, M_x, M_y, M_z)
+    velocity_grid = StructArray{SVector{3, T}}((ux, uy, uz))
+
+    fft_M_x = M_x ÷ Int32(2) + Int32(1)
+    fh_x = zeros(Complex{T}, fft_M_x, M_y, M_z)
+    fh_y = zeros(Complex{T}, fft_M_x, M_y, M_z)
+    fh_z = zeros(Complex{T}, fft_M_x, M_y, M_z)
+    fluid_hat = StructArray{SVector{3, Complex{T}}}((fh_x, fh_y, fh_z))
+
+    PI2 = T(2) * T(π)
+    k_x = T[PI2 * (i - 1) / L[1] for i in 1:fft_M_x]
+    k_y = T[
+        PI2 * (j ≤ M_y ÷ Int32(2) + Int32(1) ? T(j - 1) : T(j - 1 - M_y)) / L[2]
+        for j in 1:M_y
+    ]
+    k_z = T[
+        PI2 * (k ≤ M_z ÷ Int32(2) + Int32(1) ? T(k - 1) : T(k - 1 - M_z)) / L[3]
+        for k in 1:M_z
+    ]
+
+    forward_plan = plan_rfft(fx)
+    backward_plan = plan_brfft(fh_x, Int(M_x))
+
+    return FFCMConfig{
+        T,
+        typeof(force_grid),
+        typeof(fluid_hat),
+        typeof(forward_plan),
+        typeof(backward_plan),
+    }(
         L,
         R_c,
         num_cells,
@@ -156,5 +200,13 @@ function FFCMConfig{T}(;
         ind_x,
         ind_y,
         ind_z,
+        μ,
+        velocity_grid,
+        fluid_hat,
+        k_x,
+        k_y,
+        k_z,
+        forward_plan,
+        backward_plan,
     )
 end
