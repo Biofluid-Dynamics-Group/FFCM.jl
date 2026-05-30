@@ -1,21 +1,30 @@
 """
+    wrap_positions!(dest, src, L) -> dest
     wrap_positions!(Y, L) -> Y
 
-Fold each column of `Y` (a `3×N` matrix of particle positions) into the
-canonical periodic domain `[0, L_i)` for each axis `i`. Idempotent. The
-fp-roundoff corner case where `mod(y, L_i)` rounds to exactly `L_i` is
-left to the downstream cell-index clamp in `_assign_cells_kernel!`.
+Fold each column of the `3×N` position matrix `src` into the canonical periodic
+domain `[0, L_i)` for each axis `i`, writing the result into `dest`. The
+out-of-place form lets the assembled `mobility!` driver wrap into a scratch
+buffer without touching the caller's positions; the in-place form (`dest === src`)
+folds `Y` in place. Idempotent. The fp-roundoff corner case where `mod(y, L_i)`
+rounds to exactly `L_i` is left to the downstream cell-index clamp in
+`_assign_cells_kernel!`.
 
 See `spec/spatial-hashing.md`.
 """
-function wrap_positions!(Y::AbstractMatrix{T}, L::NTuple{3, T}) where {T}
-    @inbounds @simd for n in axes(Y, 2)
-        Y[1, n] = mod(Y[1, n], L[1])
-        Y[2, n] = mod(Y[2, n], L[2])
-        Y[3, n] = mod(Y[3, n], L[3])
+function wrap_positions!(
+    dest::AbstractMatrix{T}, src::AbstractMatrix{T}, L::NTuple{3, T},
+) where {T}
+    @inbounds @simd for n in axes(src, 2)
+        dest[1, n] = mod(src[1, n], L[1])
+        dest[2, n] = mod(src[2, n], L[2])
+        dest[3, n] = mod(src[3, n], L[3])
     end
-    return Y
+    return dest
 end
+
+wrap_positions!(Y::AbstractMatrix{T}, L::NTuple{3, T}) where {T} =
+    wrap_positions!(Y, Y, L)
 
 """
     _build_cell_list_kernel!(

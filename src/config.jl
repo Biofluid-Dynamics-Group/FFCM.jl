@@ -47,6 +47,7 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdPlan, BwdPlan}
     cell_cursor::Vector{Int32}
     Y_sorted::Matrix{T}
     F_sorted::Matrix{T}
+    Y_wrapped::Matrix{T}
     a::T
     σ::T
     Σ::T
@@ -116,6 +117,9 @@ function FFCMConfig{T}(;
     cell_cursor = Vector{Int32}(undef, num_cells_total)
     Y_sorted = Matrix{T}(undef, 3, N)
     F_sorted = Matrix{T}(undef, 3, N)
+    # Scratch the assembled `mobility!` driver folds the caller's positions into,
+    # so the caller's `Y` is never mutated (see `mobility!`, spec/mobility.md).
+    Y_wrapped = Matrix{T}(undef, 3, N)
 
     σ = a / sqrt(T(π))
     Σ = Σ_over_σ * σ
@@ -192,6 +196,7 @@ function FFCMConfig{T}(;
         cell_cursor,
         Y_sorted,
         F_sorted,
+        Y_wrapped,
         a,
         σ,
         Σ,

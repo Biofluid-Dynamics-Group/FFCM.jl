@@ -1,7 +1,7 @@
 using Test
 using FFCM
 using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!,
-    spread_forces!, stokes_solve!, interpolate_velocities!, correct_velocities!
+    spread_forces!, stokes_solve!, interpolate_velocities!, mobility!
 
 # Reciprocal-lattice sum of the σ-regularised periodic Stokeslet self-mobility
 # (paper eq 205-207, Fourier form), the true M^VF self-mobility a single particle
@@ -118,15 +118,10 @@ end
             L = L, R_c = T(1), N = 1, Σ_over_σ = Σ_over_σ, μ = T(1),
             num_grid_points = (M, M, M), M_G = M_G,
         )
-        Y = copy(Y0)
-        wrap_positions!(Y, config.L)
-        assign_cells!(config, Y)
-        sort_particles_by_cell!(config, Y, F)
-        spread_forces!(config)
-        stokes_solve!(config)
+        # The assembled driver composes all six steps in one allocation-free,
+        # non-mutating call (spec/mobility.md); Y0 is left untouched.
         V = zeros(T, 3, 1)
-        interpolate_velocities!(V, config)
-        correct_velocities!(V, config)
+        mobility!(V, config, Y0, F)
 
         # Grid-resolution / stencil-truncation limited; rtol = 1e-4 holds with margin.
         @test V[1, 1] ≈ reference rtol = T(1e-4)
