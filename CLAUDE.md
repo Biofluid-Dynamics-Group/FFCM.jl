@@ -9,12 +9,11 @@ FFCM.jl is a Julia implementation of the Fast Force-Coupling Method (FFCM)
 for hydrodynamic interactions between rigid particles in a triply-periodic
 Stokes flow, following Su & Keaveny (2024), *J. Comput. Phys.* 510, 113060.
 
-As rigid spherical particles can be viewed as regularised markers on an immersed-boundary
-type of method to solve fluid-structure interaction, it is also useful to view FFCM as a
+FFCM is a
 particular approximation to the mobility operator $\mathcal{M}^{\mathcal{V}\mathcal{F}}$
 that maps a finite number of forces $\mathcal{F}$ localised at positions $\mathcal{Y}$ to
 their corresponding velocities $\mathcal{V}$ if they interact hydrodynamically via the
-Stokes equation.
+Stokes equation. This can be the Stokes solution to a problem of colloidal suspension, or, equivalently, an immersed-boundary method where the distributional terms have been regularised using Gaussian kernels.
 
 The package exposes a plug-and-play mobility operator
 
@@ -35,13 +34,13 @@ allocation-free and the GPU backend hides device traffic from callers.
 ## 2. Ground rules
 
 1. **The paper is the spec.** Notation, equations, and parameter meanings
-   in this codebase follow Su & Keaveny (2024). The mapping between paper
+   in this codebase follow Su & Keaveny (2024) unless otherwise stated. The mapping between paper
    symbols and code identifiers lives in
    [spec/notation.md](spec/notation.md).
 
-2. **`racksa/cuFCM` is a *reference* for implementation.** This repository is the
+2. **`racksa/cuFCM` is a *reference* for implementation.** The
    original C++/CUDA implementation of FFCM by the paper's author. You may
-   read it to learn memory-layout, cell-list, and FFT-orchestration tricks
+   read it to learn orchestration tricks
    for GPU.
 
 3. **`spec/` is the source of truth for *what the code does*.** The paper is the
