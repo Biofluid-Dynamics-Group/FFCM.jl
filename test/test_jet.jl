@@ -3,7 +3,7 @@ using JET
 using FFCM
 using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!,
     sort_particles_by_cell!, spread_forces!, stokes_solve!,
-    interpolate_velocities!
+    interpolate_velocities!, correct_velocities!
 
 # JET catches dispatch / inference problems that `@inferred` alone can miss
 # (e.g., method-instability in callees, abstract field accesses) by walking
@@ -26,5 +26,6 @@ using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!,
         @test_call stokes_solve!(config)
         V = zeros(T, 3, 16)
         @test_call interpolate_velocities!(V, config)
+        @test_call correct_velocities!(V, config)
     end
 end
