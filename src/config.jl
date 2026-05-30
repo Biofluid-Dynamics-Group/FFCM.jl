@@ -27,6 +27,10 @@ The grid spacing `Δx = L_i / num_grid_points[i]` is required to be
 identical across axes (paper §3 isotropy assumption); the constructor
 throws `ArgumentError` otherwise.
 
+The cutoff must satisfy `0 < R_c ≤ min(L) / 2` so the pairwise correction's
+minimum image is unambiguous and no particle is corrected against its own
+periodic image (paper §4, `outline.tex:318`).
+
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`,
 `spec/force-spreading.md`.
 """
@@ -82,6 +86,11 @@ function FFCMConfig{T}(;
 ) where {T <: AbstractFloat}
     R_c > zero(T) || throw(ArgumentError("R_c must be positive"))
     all(>(zero(T)), L) || throw(ArgumentError("L components must be positive"))
+    R_c ≤ minimum(L) / T(2) || throw(ArgumentError(
+        "R_c must be at most half the smallest box length (paper outline.tex:318 " *
+        "requires the minimum image to be unambiguous, with no self-image " *
+        "corrections); got R_c = $(R_c), min(L)/2 = $(minimum(L) / T(2))",
+    ))
     N > 0 || throw(ArgumentError("N must be positive"))
     a == T(1) || error("non-unit particle radius not yet implemented")
     Σ_over_σ ≥ T(1) || throw(ArgumentError(
