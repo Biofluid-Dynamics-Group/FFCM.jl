@@ -1,13 +1,13 @@
 # Particle Sorting and Cell Lists
 
-Step 2 of the Fast FCM algorithm (Su & Keaveny 2024, §4, Step `sort`;
-`paper/tex/outline.tex:518`). Given the per-particle cell hash from step 1,
-this step (a) counting-sorts the particles by hash so that particles sharing
-a cell — and particles spreading to common grid points — become contiguous
-in memory, and (b) records, for each cell, the index range of its particles
-in the sorted order. The contiguity makes spreading/interpolation (steps 3,
-5) cache-friendly and lets the pairwise correction (step 6) walk a cell by
-its first/last index.
+Step 2 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
+
+## Summary
+
+Given the spatial hashing of step 1, The arrays that hold the forces of the particles $\left\{ \boldsymbol{F}_n \right\}_{n = 1}^N$ and their positions $\left\{ \boldsymbol{Y}_n \right\}_{n = 1}^N$  are sorted by key so that they are stored in memory by cell.
+
+In the code, we define
+- `F` $= (\boldsymbol{F}_1, \dots, \boldsymbol{F}_N)$.
 
 ## Contract
 

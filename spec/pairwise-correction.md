@@ -1,29 +1,36 @@
 # Pairwise correction
 
-Step 6 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 6;
-`paper/tex/outline.tex:533`), the real-space part of the Ewald-style splitting
-introduced in paper §4 (`outline.tex:246-250`),
+Step 6 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
 
+## Summary
+
+Standard FCM is equivalent to the application of a mobility operator $\mathcal{M}^{\mathcal{VF}}$. The
+operator resulting from the modified Gaussian kernel is denoted $\tilde{\mathcal{M}}^{\mathcal{VF}}$, from
+which the error incurred by widening the Gaussian kernel is summarised by the splitting
 $$
-\mathcal{M}^{\mathcal{V}\mathcal{F}}
-= \widetilde{\mathcal{M}}^{\mathcal{V}\mathcal{F}}
-+ \left(\mathcal{M}^{\mathcal{V}\mathcal{F}} - \widetilde{\mathcal{M}}^{\mathcal{V}\mathcal{F}}\right).
+    \mathcal{M}^{\mathcal{VF}}
+    = \tilde{\mathcal{M}}^{\mathcal{VF}}
+    + \left(\mathcal{M}^{\mathcal{VF}} - \tilde{\mathcal{M}}^{\mathcal{VF}}\right) \text{.}
+$$
+Thus, the difference operator $\left(\mathcal{M}^{\mathcal{VF}} - \tilde{\mathcal{M}}^{\mathcal{VF}}\right)$ is the correction term that needs to be applied to recover the approximation properties
+of FCM. This operator is approximately sparse due to the decaying nature of the Gaussian kernel,
+and therefore we apply it as a sparse pair-wise sum using the particle binning in the cells.
+
+The analytical form of the correction is given, for the block corresponding to particles $n$ and $m$,
+$$\begin{align*}
+    \boldsymbol{M}_{nm} - \tilde{\boldsymbol{M}}_{nm} &= \left(\boldsymbol{G}\left( \boldsymbol{Y}_n - \boldsymbol{Y}_m \right) + \sigma^2 \Delta \boldsymbol{G}\left( \boldsymbol{Y}_n - \boldsymbol{Y}_m \right)\right) \left( \operatorname{erf}\left(\frac{\left\lvert \boldsymbol{Y}_n - \boldsymbol{Y}_m \right\rvert}{\sigma \sqrt{2}}\right) - \operatorname{erf}\left(\frac{\left\lvert \boldsymbol{Y}_n - \boldsymbol{Y}_m \right\rvert}{\Sigma \sqrt{2}}\right) \right) \\
+    &\qquad + \boldsymbol{S}^{(3)}\left( \boldsymbol{Y}_n - \boldsymbol{Y}_m; \sigma \sqrt{2} \right) - \boldsymbol{S}^{(3)}\left( \boldsymbol{Y}_n - \boldsymbol{Y}_m; \Sigma \sqrt{2} \right) \\
+    &\qquad - \left(\sigma^2 - \Sigma^2\right) \boldsymbol{Q}^{(2)}\left( \boldsymbol{Y}_n - \boldsymbol{Y}_m; \Sigma \sqrt{2} \right) - \frac{\left(\sigma^2 - \Sigma^2\right)^2}{4} \boldsymbol{T}\left( \boldsymbol{Y}_n - \boldsymbol{Y}_m; \Sigma \sqrt{2} \right) \quad \text{§3, equation (31)} \text{,}
+\end{align*}$$
+where the corresponding operators are (REFACTOR NOTE: All operators, and the Laplacian of $\boldsymbol{G}$, should be defined here according to the final form that is used in the code. The typo should also be verified against the published paper while refactoring).
+
+The self correction is well defined analytically,
+$$
+    \lim_{\left\lvert\boldsymbol{Y}_n - \boldsymbol{Y}_m\right\rvert \to 0} \boldsymbol{M}_{nm} - \tilde{\boldsymbol{M}}_{nm} = \underbrace{\left( \frac{1}{6\pi\mu a} - \frac{1}{6\pi\mu\Sigma\sqrt{\pi}} + \frac{\sigma^2 - \Sigma^2}{12\mu \left(\Sigma \sqrt{\pi}\right)^3} - \frac{\left(\sigma^2 - \Sigma^2\right)^2}{32\mu \Sigma^5 \pi^{\frac{3}{2}}} \right)}_{\eqqcolon \delta} \boldsymbol{I} \text{.}
 $$
 
-Steps 3–5 evaluate the grid part $\widetilde{\mathcal{M}}^{\mathcal{V}\mathcal{F}}$
-with the modified kernel of width $\Sigma > \sigma$ (paper eq 267). Because
-$\Sigma \ne \sigma$, the grid result carries a near-field error. Step 6 adds the
-analytic correction $\mathcal{M}^{\mathcal{V}\mathcal{F}} -
-\widetilde{\mathcal{M}}^{\mathcal{V}\mathcal{F}}$, which decays exponentially in
-particle separation (`outline.tex:318`) and is therefore applied as a **sparse,
-real-space pairwise sum** over the step-1/2 cell list, plus a per-particle **self
-term**. After step 6, the assembled operator returns the true $\sigma$-regularised
-mobility — **independent of the chosen $\Sigma$**, which is the central correctness
-property of the splitting.
-
-Scope is **force → velocity ($\mathcal{M}^{\mathcal{V}\mathcal{F}}$) only**, matching
-steps 1–5; the torque/angular-velocity corrections (paper eq:correction_WF,
-eq:correction_WT) are out of scope.
+The code defines
+- `self_correction_term` $= \delta$ (REFACTOR NOTE: This is now `c_self`, needs to change to `self_correction_term`).
 
 ## The correction is the difference of two FCM pairwise mobilities
 

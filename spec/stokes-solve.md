@@ -1,40 +1,33 @@
 # Stokes Solve
 
-Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 4;
-`paper/tex/outline.tex:523`), defined operationally by reference to §3
-Step `solve` (`paper/tex/outline.tex:179-184`). Step 4 applies the
-inverse Stokes operator $\mathcal{L}^{-1}$ to the spread force field
-produced by step 3 ([force-spreading.md](force-spreading.md)),
-returning the resulting fluid velocity on the same uniform Cartesian
-grid.
+Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
 
-The continuous Stokes problem of paper §2 (eq 152) is
+## Summary
 
+The continuous Stokes problem is now
+$$\begin{align*}
+  & -\mu \Delta \boldsymbol{u} + \nabla p
+  = \boldsymbol{f} &\quad& \text{in} \; \Omega \quad \text{(§3, equation (23))} \; \text{and}\\
+  & \operatorname{div}\left(\boldsymbol{u}\right) = 0 &\quad& \text{in} \; \Omega \quad \text{(§3, equation (24))}\text{,}
+\end{align*}$$
+with periodic boundary conditions, where $\boldsymbol{f} = \tilde{\mathcal{J}}^\dagger\left[\left\{ \boldsymbol{F}_n \right\}_{n = 1}^N\right]$. A spectral method for this problem corresponds to solving
+the algebraic equation that arises from applying the Fourier transform to the momentum balance equation.
+
+Solving for the Fourier transform of the velocity, one gets
 $$
--\mu \Delta \bm{u} + \nabla p
-= \widetilde{\mathcal{J}}^\dagger[\mathcal{F}](\bm{x}),
-\qquad
-\nabla \cdot \bm{u} = 0,
-\qquad \bm{x} \in \Omega = \prod_{i \in \{x, y, z\}} [0, L_i) .
+  \hat{\boldsymbol{u}}(\boldsymbol{k}) = \frac{1}{\mu \lvert \boldsymbol{k} \rvert^2} \left(\boldsymbol{I} - \frac{\boldsymbol{k} \otimes \boldsymbol{k}}{\lvert \boldsymbol{k} \rvert^2}\right) \hat{\boldsymbol{f}}(\boldsymbol{k}) \text{,}
 $$
+for $\boldsymbol{k} \neq 0$ and $\hat{\boldsymbol{u}}(\boldsymbol{0}) = \boldsymbol{0}$. Note that
+$\boldsymbol{k}$ is the wavenumber vector as this is a 3D Fourier transform.
 
-On the periodic uniform grid the inverse operator has a one-line
-Fourier-space form (paper §3, equation quoted in
-`paper/tex/algorithm.tex:35`):
+The spectral method is then to apply the FFT to the spread forces sampled on the grid to obtain $\hat{\boldsymbol{f}}$, solve for $\hat{\boldsymbol{u}}$, and apply the inverse FFT to recover $\boldsymbol{u}$ sampled on the grid.
 
-$$
-\hat{\bm{u}}(\bm{k})
-= \frac{1}{\mu\, k^2}
-\left(\bm{I} - \frac{\bm{k}\bm{k}^{\!\top}}{k^2}\right)
-\hat{\bm{f}}(\bm{k})
-\quad \text{for } \bm{k} \ne \bm{0},
-\qquad \hat{\bm{u}}(\bm{0}) = \bm{0} .
-$$
+In the code, we define
+- `\mu` $= \mu$,
+- `f[i, j, k]` $= \boldsymbol{f}(i h_x, j h_y, k h_z)$, (REFACTOR NOTE: This is now `force_grid`, the naming needs to change)
+- `u[i, j, k]` $= \boldsymbol{u}(i h_x, j h_y, k h_z)$, (REFACTOR NOTE: This is now `velocity_grid`, the naming needs to change)
+- `fluid_hat[q, r, s]` $= \hat{\boldsymbol{f}}(k_q, k_r, k_s)$ initially, rewritten to $\hat{\boldsymbol{u}}(k_q, k_r, k_s)$ after the solve.
 
-Step 4 implements this Fourier-space inversion via a forward r2c FFT
-of `force_grid`, the projection above applied per Fourier mode, and a
-backward c2r FFT into `velocity_grid`. `velocity_grid` is the input to
-step 5 (interpolation).
 
 ## Notation
 

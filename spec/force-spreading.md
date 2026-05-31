@@ -1,26 +1,49 @@
 # Force Spreading
 
-Step 3 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 3;
-`paper/tex/outline.tex:520`), defined operationally by reference to §3
-Step `spread` (`paper/tex/outline.tex:178`) with the FCM operator
-$\mathcal{J}$ replaced by the modified-kernel spreading operator
-$\widetilde{\mathcal{J}}^\dagger$ and the Gaussian kernel
-$\Delta_n(\bm{x}; \sigma)$ replaced by the modified kernel
-$\widetilde{\Delta}_n(\bm{x}; \Sigma)$.
+Step 3 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
 
-Given particle positions and forces gathered into sorted order by step 2
-(see [particle-sorting.md](particle-sorting.md)), step 3 evaluates the
-modified-kernel-weighted force density on a uniform periodic Cartesian
-grid:
+## Summary
 
+The spreading operator $\tilde{\mathcal{J}}^\dagger$ is applied to the forces $\left(\boldsymbol{F}\right)_{n = 1}^N$ to create the right-hand-side for the Stokes problem. This operator is defined as
+$$\begin{align*}
+    \tilde{\mathcal{J}}^\dagger : \left[\R^3\right]^N &\to \boldsymbol{L}^{2}\left(\Omega\right) \\
+    \left(\boldsymbol{F}\right)_{i = 1}^N &\mapsto \sum_{n = 1}^N \boldsymbol{F}_n \tilde{\Delta}_n\left(\cdot; \Sigma\right) \quad \text{(§3)} \text{,}
+\end{align*}$$
+where $\tilde{\Delta}_n\left(\cdot; \Sigma\right)$ is the Fast FCM Gaussian kernel with width $\Sigma$, defined as
 $$
-\widetilde{\mathcal{J}}^\dagger[\mathcal{F}](\bm{x}_g)
-= \sum_{n=1}^{N} \bm{F}_n\, \widetilde{\Delta}_n(\bm{x}_g; \Sigma)
-\quad \text{for every grid point } \bm{x}_g .
+    \tilde{\Delta}_n\left(\boldsymbol{x}; \Sigma\right) \coloneqq \left(1 + \frac{\sigma^2 - \Sigma^2}{2} \Delta \right) \Delta_n\left(\boldsymbol{x}; \Sigma\right) \quad \text{(§3, equation (22))}\text{.}
 $$
+$\Delta_n(\boldsymbol{x}, \sigma)$ is, in turn, the original Gaussian kernel (with width $\sigma$, its second argument). That is,
+$$
+  \Delta_n(\boldsymbol{x}; \sigma) = \frac{1}{\left(2\pi\sigma^2\right)^3} e^{\frac{-\left\lvert \boldsymbol{x} - \boldsymbol{Y}_n \right\rvert^2}{2\sigma^2}} \quad \text{(§2, equation (1))}\text{,}
+$$
+where $\boldsymbol{Y}_n$ is the position of particle $n$.
 
-This grid force field is the input to step 4 (Stokes solve). The grid
-layout and storage choice committed in this document pin that interface.
+The idea behind this kernel is to use $\Sigma \geq \sigma$, i.e. spread the forces using a relatively large Gaussian kernel. That reduces the refinement requirements of the Stokes solver for accuracy, at the cost of an added error in hydrodynamic interactions that needs to be corrected. However, due to the exponential decay of Gaussians, this correction can be applied to a fraction of the total particle pairs while maintaining accuracy. $\Sigma = \sigma$ reduces to the standard FCM.
+
+Note that the Gaussian kernel in the original FCM is set to be $\sigma = \frac{a}{\sqrt{\pi}}$, so that FCM recovers the Stokes drag law for a single particle if its radius is $a$ (§2). Thus, $\sigma$ is set by the particle radius, and $\Sigma$ is variable to accelerate the method. For numerical reasons, it is reasonable to assume the particle radius $a$ as our length scale, so that all dimensions are expressed in terms of $a$.
+
+It is easy (if we distinguish that $\Delta$ is the Laplacian operator and $\Delta_n$ is a Gaussian kernel) to show that
+$$
+  \Delta \Delta_n(\boldsymbol{x}; \Sigma) = \left( \frac{\left\lvert \boldsymbol{x} - \boldsymbol{Y}_n \right\rvert^2}{\Sigma^4} - \frac{3}{\Sigma^2} \right) \Delta_n\left(\boldsymbol{x}; \Sigma\right) \text{,}
+$$
+and, since $\sigma \leq \Sigma$, we can write
+$$
+  \tilde{\Delta}_n\left(\boldsymbol{x}; \Sigma\right) = \left(a_0 + a_2 r_n^2 \right) \Delta_n\left(\boldsymbol{x}; \Sigma\right) \text{,}
+$$
+where $a_0 = 1 - \frac{3\left(\sigma^2 - \Sigma^2\right)}{2 \Sigma^2}$, $a_2 = \frac{\sigma^2 - \Sigma^2}{2\Sigma^4}$ and $r_n = \left\lvert \boldsymbol{x} - \boldsymbol{Y}_n \right\rvert$. Standard FCM is then the case where $a_0 = 1$ and $a_2 = 0$.
+
+The resulting function $\tilde{\mathcal{J}}^\dagger\left[\left(\boldsymbol{F}_n\right)_{n = 1}^N\right]$ is computed on the gridpoints for the Stokes solver, but is truncated to be supported on a stencil of $M_G \times M_G \times M_G$ gridpoints.
+
+In the code, we define
+- `σ` $= \sigma$,
+- `Σ` $= \Sigma$,
+- `num_grid_points` $= (M_x, M_y, M_z)$,
+- `M\_G` $= M_G$,
+- `h` $= h_x = h_y = h_z$, (REFACTOR NOTE: currently, `h` is `\Delta x`. This should be changed for clarity to `h`.)
+- `a` $= a = 1$,
+- `Σ_over_σ` $= \frac{\Sigma}{\sigma}$, the actual control parameter, see §5 in the paper.
+
 
 ## Notation (paper-consistent)
 
@@ -202,32 +225,6 @@ ind_x, ind_y, ind_z)` is the function-barrier kernel: it takes naked
 arrays and scalars so it is independently testable and benefits from
 Julia's standard type-stability pattern.
 
-## Modified kernel — closed form
-
-From paper eq 267 (`outline.tex:265-269`):
-
-$$
-\widetilde{\Delta}_n(\bm{x}; \Sigma)
-= \left(1 + \frac{\sigma^2 - \Sigma^2}{2}\, \nabla^2\right) \Delta_n(\bm{x}; \Sigma).
-$$
-
-The Laplacian of the FCM Gaussian (paper eq 148, `outline.tex:147-149`)
-is itself a polynomial-in-$r^2$ times the same Gaussian. With
-$r = |\bm{x} - \bm{Y}_n|$,
-$$
-\nabla^2 \Delta_n(\bm{x}; \Sigma)
-= \left(\frac{r^2}{\Sigma^4} - \frac{3}{\Sigma^2}\right)\, \Delta_n(\bm{x}; \Sigma).
-$$
-Therefore, with $\mathrm{pdmag} = \sigma^2 - \Sigma^2 \leq 0$,
-$$
-\widetilde{\Delta}_n(\bm{x}; \Sigma)
-= \bigl(a_0 + a_2\, r^2\bigr)\, \Delta_n(\bm{x}; \Sigma),
-\qquad a_0 = 1 - \frac{3\, \mathrm{pdmag}}{2\Sigma^2},
-\qquad a_2 = \frac{\mathrm{pdmag}}{2\Sigma^4}.
-$$
-At $\Sigma = \sigma$ this reduces to $a_0 = 1$, $a_2 = 0$ and
-$\widetilde{\Delta}_n = \Delta_n$ — the standard FCM monopole kernel.
-
 ### Separability of the Gaussian
 
 With $g(s; \Sigma) = (2\pi\Sigma^2)^{-1/2}\exp(-s^2 / 2\Sigma^2)$ the 1-D
@@ -245,6 +242,7 @@ polynomial term, no further exponentials.
 The polynomial $r^2 = (x - Y_{n,1})^2 + (y - Y_{n,2})^2 + (z - Y_{n,3})^2$
 likewise sums precomputed axis-squared distances
 `r²_x[..] + r²_y[..] + r²_z[..]`.
+
 
 ### Per-particle stencil — nearest-anchored
 

@@ -1,16 +1,6 @@
 # Mobility operator
 
-The assembled Fast FCM mobility operator (Su & Keaveny 2024, §4;
-`paper/tex/outline.tex:495`). Steps 1–6 — spatial hashing, particle sorting,
-force spreading, the FFT Stokes solve, interpolation, and the real-space
-pairwise correction — are individually specified in
-[spatial-hashing.md](spatial-hashing.md), [particle-sorting.md](particle-sorting.md),
-[force-spreading.md](force-spreading.md), [stokes-solve.md](stokes-solve.md),
-[interpolation.md](interpolation.md), and [pairwise-correction.md](pairwise-correction.md).
-This document specifies the single hot call that composes them, and the
-matrix-free `LinearAlgebra` operator wrapper that lets it drop into an iterative
-solver. It defines no new numerics — the contract is the two-phase API and the
-`mul!` interface of `CLAUDE.md` §3.
+The assembled Fast FCM mobility operator (Su & Keaveny 2024, §3, equation (19)).
 
 ## What the operator computes
 

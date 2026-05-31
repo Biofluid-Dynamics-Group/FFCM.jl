@@ -1,34 +1,59 @@
 # Spatial Hashing
 
-Step 1 of the Fast FCM algorithm (Su & Keaveny 2024, §4, Step 1). Spatial hashing assigns each
-particle a cell index used downstream for sorted-by-cell memory layout
-(step 2) and $O(1)$ neighbour lookup in the pairwise correction (step 6).
+Step 1 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
+
+## Summary
+
+The domain for the Stokes problem is $\Omega = [0, L_x) \times [0, L_y) \times [0, L_z)$
+with triply-periodic boundary conditions. Fast FCM is accelerated by decoupling the
+discretisation level of the spectral solver from the width of the delta distribution
+approximation.
+
+The grid for the spectral solver is a uniform discretisation with $M_x, M_y, M_z$ gripoints in
+directions $z, y, z$, with spacings $h_x, h_y, h_z$. The total number of gridpoints is then $M = M_x M_y M_z$.
+
+The first step in acceleration involves a grouping of the $N$ particles at positions $\left\{ \boldsymbol{Y}_n \right\}_{n = 1}^N$ in the domain into
+_cells_: a partition of the domain into rectangular prisms. The cells are generated so that
+all particles within a _cutoff radius_ $R_c$ of a specific particle are either in the same
+cell or in adjacent cells. Axis $x$ is divided into $m_x$ intervals, axis $y$ into $m_y$ and axis $z$ into $m_z$: that determine the total amount of cells. Each cell has an index where
+$$
+  \text{cell index} = i + \left(j + k m_y\right) m_x \quad \text{(§4, equation (68))}
+$$
+with $i = 0, \dots, m_x - 1$, $j = 0, \dots m_y - 1$ and $k = 0, \dots, m_z - 1$. Each particle is assigned to its cell (by position) identified with the cell index. The hashing is then a mapping
+particle $\mapsto$ cell index.
+
+In the code, we define
+- `L` $= (L_x, L_y, L_z)$,
+- `N` $= N$,
+- `Y` $= (\boldsymbol{Y}_1, \dots, \boldsymbol{Y}_N)$,
+- `R_\c` $= R_c$, 
+- `num_cells` $= (m_x, m_y, m_z)$ and
+- `cell_hash[n]` $= \text{cell index of particle } n$.
 
 ## Contract
 
 ### Cold-path input (user-supplied to `FFCMConfig`)
 
-- Domain $\Omega = [0, L_x) \times [0, L_y) \times [0, L_z)$, triply-periodic, possibly
-  anisotropic. Stored as `L::NTuple{3, T}`. Corner-origin matches the
+- `L::NTuple{3, T}` $= (L_x, L_y, L_z)$. Corner-origin matches the
   paper convention and the cuFCM C++ reference, so every step can be
   cross-checked against the paper without a coordinate translation in the
   way.
-- Cutoff radius `R_c::T` for the pairwise correction.
-- Particle count `N::Integer`. Fixed for the lifetime of the
+- Cutoff radius `R_c::T` $= R_c$ for the pairwise correction.
+- Particle count `N::Integer` $= N$. Fixed for the lifetime of the
   `FFCMConfig`; changing `N` requires a new configuration.
 
 ### Cold-path derived state (computed once, stored on `FFCMConfig`)
 
 - `num_cells::NTuple{3, Int32}` — number of cells per axis, with
-  components `num_cells[i] = m_i = max(floor(Int32, L_i / R_c), Int32(3))`.
+  components `num_cells[i]` $= m_i =$ `max(floor(Int32, L_i / R_c), Int32(3))`.
   The `max(·, 3)` floor guarantees that for any particle position the
   26-neighbour stencil covers all `R_c`-balls (paper §4 Step 1).
-- `cell_size::NTuple{3, T}` — cell extents `cell_size_i = L_i / m_i`.
+- `cell_size::NTuple{3, T}` — cell extents `cell_size[i]` $= L_i / m_i$.
   Invariant `cell_size_i ≥ R_c` by construction.
-- `inv_cell_size::NTuple{3, T}` — precomputed `1 / cell_size_i` so the hot
+- `inv_cell_size::NTuple{3, T}` — precomputed `1 / cell_size[i]` so the hot
   path multiplies instead of divides.
 - `cell_hash::Vector{Int32}` — length-`N` buffer that the hot path writes
-  into.
+  into `cell_hash[n]` is the cell index of particle `n`.
 
 ### Hot-path input (per `mobility!` call)
 

@@ -1,26 +1,27 @@
 # Interpolation
 
-Step 5 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 5;
-`paper/tex/outline.tex:530`), defined operationally by reference to §3
-Step `interpolate` (`paper/tex/outline.tex:185`) with the FCM operator
-$\mathcal{J}$ replaced by the modified-kernel interpolation operator
-$\widetilde{\mathcal{J}}$ and the Gaussian kernel $\Delta_n(\bm{x}; \sigma)$
-replaced by the modified kernel $\widetilde{\Delta}_n(\bm{x}; \Sigma)$.
+Step 5 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
 
-Step 5 consumes the `velocity_grid` produced by step 4
-([stokes-solve.md](stokes-solve.md)) and interpolates the fluid velocity
-back to each particle position, producing the particle velocities — the
-output of the mobility operator. Per paper eq 283
-(`paper/tex/outline.tex:283`),
+## Summary
 
-$$
-\widetilde{\bm V}_n = (\widetilde{\mathcal{J}}[\bm u])_n
-= \int_{\Omega} \bm u(\bm x)\, \widetilde{\Delta}_n(\bm x; \Sigma)\, d^3\bm x ,
-$$
+The fluid velocity $\boldsymbol{u}$ is set to match a no-slip condition on the particles. This
+is realised by setting the particle velocities to be interpolations of the fluid velocity.
+This operator,
+$$\begin{align*}
+    \tilde{\mathcal{J}} : \boldsymbol{L}^{2}\left(\Omega\right) &\to \left[\R^3\right]^N \\
+    \boldsymbol{u} &\mapsto \int_{\Omega} \boldsymbol{u}\left(\boldsymbol{x}\right) \tilde{\Delta}_n\left(\boldsymbol{x}; \Sigma\right) \, \mathrm{d}\boldsymbol{x} \quad \text{(§3, equation(26))} \text{,}
+\end{align*}$$
+is the adjoint of the spreading operator $\mathcal{J}^\dagger$ because the spreading and interpolation
+kernels are the same modified Gaussian kernel.
 
-evaluated numerically by the trapezoidal rule on the same uniform grid,
-truncated to the same $M_G \times M_G \times M_G$ stencil as the spread
-(paper §3 Step `interpolate`, `outline.tex:185`).
+The resulting vector $\tilde{\mathcal{J}}\left[\boldsymbol{u}\right] = \left(\boldsymbol{V}_n\right)_{n = 1}^N$ corresponds to the particle velocities and closes the definition of the mobility operator.
+
+Since we have a sampling of $\boldsymbol{u}$ on the gridpoints, the integral is approximated
+by the trapezoidal rule on those points using the $M_G \times M_G \times M_G$ stencil. (REFACTOR NOTE: There should be a formal proof that this is required for the positive-definiteness, and a descriptive comment on why
+it is spectrally accurate. Saying "Euler-Maclaurin" doesn't mean anything if you don't know that that is.)
+
+In the code, we define
+- `V` $= \left(\boldsymbol{V}_1, \dots, \boldsymbol{V}_n\right)$
 
 ## Why the quadrature is the trapezoidal rule, not Gauss quadrature
 
