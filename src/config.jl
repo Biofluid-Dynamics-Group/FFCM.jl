@@ -1,35 +1,44 @@
 """
-    FFCMConfig{T}(; L, R_c, N, a = T(1), Σ_over_σ, num_grid_points, M_G)
+    FFCMConfig{T}(; L, R_c, N, a = T(1), Σ_over_σ, num_grid_points, M_G, μ) -> FFCMConfig{T}
 
 Cold-path configuration of the Fast FCM mobility operator. Owns the cell
-geometry derived from the periodic domain `L = (L_x, L_y, L_z)` (paper §4)
-and the cutoff `R_c` for the pairwise correction, plus the FCM grid
-parameters of paper §3 (`outline.tex:175`) and §5 (`outline.tex:571-573`)
-and the hot-path buffers sized for `N` particles. The configuration is
-built once and reused across many `mobility!` calls; all per-call work
-writes into pre-allocated buffers owned by this struct. `N` is fixed at
-construction — changing `N` requires a new `FFCMConfig`.
+geometry derived from the periodic domain `L = (L_x, L_y, L_z)` (paper §4) and
+the cutoff `R_c` for the pairwise correction, plus the FCM grid parameters
+(paper §3 and §5) and the hot-path buffers sized for `N` particles. The
+configuration is built once and reused across many `mobility!` calls; all
+per-call work writes into pre-allocated buffers owned by this struct. `N` is
+fixed at construction — changing `N` requires a new `FFCMConfig`.
 
-Keyword arguments for step 3 (force spreading):
+# Keywords
+- `L::NTuple{3, T}`: the triply-periodic box lengths `(L_x, L_y, L_z)`
+  (paper §4). Each component must be positive.
+- `R_c::T`: the real-space cutoff of the pairwise correction. Must satisfy
+  `0 < R_c ≤ min(L)/2`, so the minimum image is unambiguous and no particle is
+  corrected against its own periodic image (paper §4).
+- `N::Integer`: the number of particles; fixes the hot-path buffer sizes. Must
+  be positive.
+- `a::T = T(1)`: the particle hydrodynamic radius. Only `a == T(1)` is
+  currently supported; the kernel width follows `σ = a/√π` (paper §2, the FCM
+  radius–width relation that recovers the single-particle Stokes drag).
+- `Σ_over_σ::T`: the modified-kernel resolution ratio `Σ/σ` (paper §5). Must
+  satisfy `Σ_over_σ ≥ T(1)`; the equality `Σ = σ` is the standard-FCM
+  degenerate limit.
+- `num_grid_points::NTuple{3, Int32}`: the FFT grid dimensions
+  `(M_x, M_y, M_z)` (paper §3). The induced spacing `h = L_i / M_i` must be
+  identical across axes (paper §3 isotropy assumption).
+- `M_G::Integer`: the cubic stencil support per axis (paper §5). Stored as
+  `Int32`; must be at least 2.
+- `μ::T`: the fluid dynamic viscosity (paper §2, Stokes momentum balance). Must
+  be positive.
 
-- `a::T = T(1)` — particle hydrodynamic radius. Only `a == T(1)` is
-  currently supported (paper §2, eq 163; CLAUDE.md unit-radius
-  convention).
-- `Σ_over_σ::T` — kernel resolution ratio Σ/σ (paper §5,
-  `outline.tex:573`); must satisfy `Σ_over_σ ≥ T(1)`. The equality case
-  `Σ = σ` is the standard-FCM degenerate limit.
-- `num_grid_points::NTuple{3, Int32}` — FFT grid dimensions
-  `(M_x, M_y, M_z)` (paper §3, `outline.tex:175`).
-- `M_G::Integer` — cubic stencil support per axis (paper §5,
-  `outline.tex:571`). Stored as `Int32`. Must be at least 2.
+# Returns
+- `FFCMConfig{T}`: the compiled configuration, ready to pass to `mobility!`.
 
-The grid spacing `h = L_i / num_grid_points[i]` is required to be
-identical across axes (paper §3 isotropy assumption); the constructor
-throws `ArgumentError` otherwise.
-
-The cutoff must satisfy `0 < R_c ≤ min(L) / 2` so the pairwise correction's
-minimum image is unambiguous and no particle is corrected against its own
-periodic image (paper §4, `outline.tex:318`).
+# Throws
+- `ArgumentError`: if `R_c ≤ 0`, any `L_i ≤ 0`, `R_c > min(L)/2`, `N ≤ 0`,
+  `Σ_over_σ < 1`, `M_G < 2`, any `num_grid_points` component `< 1`, the grid
+  spacing is anisotropic, or `μ ≤ 0`.
+- `ErrorException`: if `a ≠ T(1)` (non-unit radius not yet implemented).
 
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`,
 `spec/force-spreading.md`.
@@ -88,22 +97,22 @@ function FFCMConfig{T}(;
     R_c > zero(T) || throw(ArgumentError("R_c must be positive"))
     all(>(zero(T)), L) || throw(ArgumentError("L components must be positive"))
     R_c ≤ minimum(L) / T(2) || throw(ArgumentError(
-        "R_c must be at most half the smallest box length (paper outline.tex:318 " *
-        "requires the minimum image to be unambiguous, with no self-image " *
-        "corrections); got R_c = $(R_c), min(L)/2 = $(minimum(L) / T(2))",
+        "R_c must be at most half the smallest box length (paper §4 requires " *
+        "the minimum image to be unambiguous, with no self-image corrections); " *
+        "got R_c = $(R_c), min(L)/2 = $(minimum(L) / T(2))",
     ))
     N > 0 || throw(ArgumentError("N must be positive"))
     a == T(1) || error("non-unit particle radius not yet implemented")
     Σ_over_σ ≥ T(1) || throw(ArgumentError(
-        "Σ/σ must be at least 1 (paper eq 267 requires Σ ≥ σ; the equality " *
-        "case is the standard-FCM degenerate limit); got Σ/σ = $(Σ_over_σ)",
+        "Σ/σ must be at least 1 (paper §3 equation (22) requires Σ ≥ σ; the " *
+        "equality case is the standard-FCM degenerate limit); got Σ/σ = $(Σ_over_σ)",
     ))
     M_G ≥ 2 || throw(ArgumentError("M_G must be at least 2; got $(M_G)"))
     all(≥(Int32(1)), num_grid_points) ||
         throw(ArgumentError("num_grid_points components must each be ≥ 1"))
     μ > zero(T) || throw(ArgumentError(
-        "μ must be positive (paper §2 eq 152 requires a positive viscosity); " *
-        "got μ = $(μ)",
+        "μ must be positive (paper §2 Stokes momentum balance requires a " *
+        "positive viscosity); got μ = $(μ)",
     ))
 
     num_cells = ntuple(i -> max(floor(Int32, L[i] / R_c), Int32(3)), 3)

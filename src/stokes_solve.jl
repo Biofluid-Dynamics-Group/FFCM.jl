@@ -1,24 +1,30 @@
 """
     stokes_solve!(config) -> config
 
-Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 4 = §3
-Step `solve`). Apply the inverse Stokes operator `L^{-1}` to the spread
-force field in `config.force_density` and write the resulting fluid
-velocity field to `config.fluid_velocity`. Reads `config.force_density`
-(populated by `spread_forces!`); writes `config.fluid_velocity` and
-overwrites `config.fluid_hat`.
+Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4; the Fourier-space
+Stokes inversion of §3, equations (32)–(33)). Apply the inverse Stokes operator
+`L^{-1}` to the spread force field in `config.force_density` and write the
+resulting fluid velocity field to `config.fluid_velocity`. Allocation-free and
+type-stable on `T <: AbstractFloat`.
 
 Operationally:
-  1. Forward r2c FFT each component of `force_density` into the
-     corresponding component of `fluid_hat`.
-  2. Apply `(I − k̂k̂ᵀ)/(μ k²) / M` per Fourier mode in place on
-     `fluid_hat`; zero the `k = 0` mode (the mean-flow gauge fix).
-  3. Backward c2r FFT each component of `fluid_hat` into the
-     corresponding component of `fluid_velocity`.
+  1. Forward r2c FFT each component of `force_density` into the corresponding
+     component of `fluid_hat`.
+  2. Apply `(I − k̂k̂ᵀ)/(μ k²) / M` per Fourier mode in place on `fluid_hat`;
+     zero the `k = 0` mode (the mean-flow gauge fix).
+  3. Backward c2r FFT each component of `fluid_hat` into the corresponding
+     component of `fluid_velocity`.
 
 The `1/M` factor compensates the unnormalised FFTW round-trip.
 
-Allocation-free and type-stable on `T <: AbstractFloat`.
+# Arguments
+- `config::FFCMConfig{T}`: the compiled configuration. Reads
+  `config.force_density` (populated by `spread_forces!`); writes
+  `config.fluid_velocity` and overwrites `config.fluid_hat`.
+
+# Returns
+- `config`: the same configuration, with `config.fluid_velocity` holding the
+  Stokes velocity field.
 
 See `spec/stokes-solve.md`.
 """
@@ -50,17 +56,28 @@ end
         fx̂, fŷ, fẑ, k_x, k_y, k_z, μ, inv_M,
     ) -> nothing
 
-Function-barrier kernel for `stokes_solve!`. In-place Fourier-space
-projection: for each `(ix, iy, iz)` with
-`k = (k_x[ix], k_y[iy], k_z[iz])`, compute `k² = kᵀk`,
-`α = inv_M / (μ k²)`, `c = (k · f̂) / k²`, and replace
-`f̂ ← α · (f̂ − k · c)` component-wise. The `k = 0` mode is gauge-fixed
-to zero (paper §3; periodic Stokes is undefined there).
+Function-barrier kernel for `stokes_solve!`. In-place Fourier-space projection:
+for each `(ix, iy, iz)` with `k = (k_x[ix], k_y[iy], k_z[iz])`, compute
+`k² = kᵀk`, `α = inv_M / (μ k²)`, `c = (k · f̂) / k²`, and replace
+`f̂ ← α · (f̂ − k · c)` component-wise. The `k = 0` mode is gauge-fixed to zero
+(paper §3; periodic Stokes is undefined there).
 
-Preconditions (caller-guaranteed, so the loops are `@inbounds`):
-the three component arrays are `Array{Complex{T}, 3}` of shape
-`(length(k_x), length(k_y), length(k_z))`; `k_x[1] = k_y[1] = k_z[1] = 0`
-(the FFTW wrap-around layout puts the zero mode at the leading index).
+# Arguments
+- `fx̂`, `fŷ`, `fẑ`: the three `Array{Complex{T}, 3}` Fourier-space force
+  components; overwritten in place with the projected velocity.
+- `k_x::Vector{T}`, `k_y::Vector{T}`, `k_z::Vector{T}`: the per-axis wavevector
+  components.
+- `μ::T`: the fluid viscosity.
+- `inv_M::T`: the `1/M` FFTW round-trip normalisation, `M = M_x·M_y·M_z`.
+
+# Returns
+- `nothing`. The three component arrays are overwritten in place.
+
+# Notes
+Preconditions (caller-guaranteed, so the loops are `@inbounds`): the three
+component arrays are `Array{Complex{T}, 3}` of shape
+`(length(k_x), length(k_y), length(k_z))`; `k_x[1] = k_y[1] = k_z[1] = 0` (the
+FFTW wrap-around layout puts the zero mode at the leading index).
 
 See `spec/stokes-solve.md`.
 """

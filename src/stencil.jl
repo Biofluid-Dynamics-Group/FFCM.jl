@@ -45,26 +45,43 @@ end
         inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
     ) -> nothing
 
-Fill the per-axis stencil scratch for one particle at position
-`(Y1, Y2, Y3)`. This is the geometry shared verbatim by force spreading
+Fill the per-axis stencil scratch for one particle at position `(Y1, Y2, Y3)`.
+This is the geometry shared verbatim by force spreading
 (`_spread_forces_kernel!`) and velocity interpolation
 (`_interpolate_velocities_kernel!`): because interpolation is the exact
 discrete adjoint of spreading, both must place and weight the `M_G³` stencil
 identically. Keeping the convention in one function is what guarantees that.
 
-For each axis the stencil is nearest-anchored at
-`j_i = round(Y_i · inv_h)` (`RoundNearestTiesToEven`, the cuFCM `my_rint`
-convention; paper §5 Table 2 calibration). For `k ∈ 1:M_G` it writes:
+For each axis the stencil is nearest-anchored at `j_i = round(Y_i · inv_h)`
+(`RoundNearestTiesToEven`, the cuFCM `my_rint` convention; paper §5 Table 1
+calibration). For `k ∈ 1:M_G` it writes, per axis:
 
 - `gaussian_*[k] = inv_norm · exp(−x² · inv_2Σ²)` — the separable 1-D Gaussian
   weight, with `x = (j_i − ⌊M_G/2⌋ + (k−1))·h − Y_i` the unwrapped stencil
-  distance and `inv_norm = 1/√(2πΣ²)`, `inv_2Σ² = 1/(2Σ²)`.
-- `r²_*[k] = x²` — the axis-squared distance (stored directly; the
-  modified-kernel polynomial only needs `r²`).
+  distance.
+- `r²_*[k] = x²` — the axis-squared distance (the modified-kernel polynomial
+  needs only `r²`).
 - `idx_*[k]` — the periodic-wrapped 1-based grid index `mod(g_i, M_i) + 1`.
 
-Preconditions (caller-guaranteed, so the loop is `@inbounds`): the nine
-scratch vectors have length `M_G`; `half_M_G = M_G ÷ 2`; `num_grid_points` holds
+# Arguments
+- `gaussian_x`, `gaussian_y`, `gaussian_z`: per-axis Gaussian-weight scratch
+  (length `M_G`) to overwrite.
+- `r²_x`, `r²_y`, `r²_z`: per-axis squared-distance scratch (length `M_G`).
+- `idx_x`, `idx_y`, `idx_z`: per-axis wrapped-index scratch (length `M_G`).
+- `Y1::T`, `Y2::T`, `Y3::T`: the particle position, folded into `[0, L_i)`.
+- `inv_norm::T`: the Gaussian normalisation `1/√(2πΣ²)`.
+- `inv_2Σ²::T`: the Gaussian exponent scale `1/(2Σ²)`.
+- `h::T`, `inv_h::T`: the grid spacing and its inverse.
+- `num_grid_points::NTuple{3, Int32}`: the grid dimensions `(M_x, M_y, M_z)`.
+- `M_G::Int32`: the cubic stencil support per axis.
+- `half_M_G::Int32`: `M_G ÷ 2`, the stencil half-width offset.
+
+# Returns
+- `nothing`. The nine scratch vectors are overwritten in place.
+
+# Notes
+Preconditions (caller-guaranteed, so the loop is `@inbounds`): the nine scratch
+vectors have length `M_G`; `half_M_G = M_G ÷ 2`; `num_grid_points` holds
 `(M_x, M_y, M_z)`; the position has been folded into `[0, L_i)` by
 `wrap_positions!`.
 
