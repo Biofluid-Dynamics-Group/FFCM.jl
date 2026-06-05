@@ -23,7 +23,7 @@ Keyword arguments for step 3 (force spreading):
 - `M_G::Integer` — cubic stencil support per axis (paper §5,
   `outline.tex:571`). Stored as `Int32`. Must be at least 2.
 
-The grid spacing `Δx = L_i / num_grid_points[i]` is required to be
+The grid spacing `h = L_i / num_grid_points[i]` is required to be
 identical across axes (paper §3 isotropy assumption); the constructor
 throws `ArgumentError` otherwise.
 
@@ -34,7 +34,7 @@ periodic image (paper §4, `outline.tex:318`).
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`,
 `spec/force-spreading.md`.
 """
-struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdPlan, BwdPlan}
+struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdTransform, BwdTransform}
     L::NTuple{3, T}
     R_c::T
     num_cells::NTuple{3, Int32}
@@ -44,7 +44,7 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdPlan, BwdPlan}
     original_index::Vector{Int32}
     cell_start::Vector{Int32}
     cell_end::Vector{Int32}
-    cell_cursor::Vector{Int32}
+    next_free_slot::Vector{Int32}
     Y_sorted::Matrix{T}
     F_sorted::Matrix{T}
     Y_wrapped::Matrix{T}
@@ -53,26 +53,26 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdPlan, BwdPlan}
     Σ::T
     num_grid_points::NTuple{3, Int32}
     M_G::Int32
-    Δx::T
-    inv_Δx::T
-    force_grid::FG
-    gauss_x::Vector{T}
-    gauss_y::Vector{T}
-    gauss_z::Vector{T}
+    h::T
+    inv_h::T
+    force_density::FG
+    gaussian_x::Vector{T}
+    gaussian_y::Vector{T}
+    gaussian_z::Vector{T}
     r²_x::Vector{T}
     r²_y::Vector{T}
     r²_z::Vector{T}
-    ind_x::Vector{Int32}
-    ind_y::Vector{Int32}
-    ind_z::Vector{Int32}
+    idx_x::Vector{Int32}
+    idx_y::Vector{Int32}
+    idx_z::Vector{Int32}
     μ::T
-    velocity_grid::FG
+    fluid_velocity::FG
     fluid_hat::FH
     k_x::Vector{T}
     k_y::Vector{T}
     k_z::Vector{T}
-    forward_plan::FwdPlan
-    backward_plan::BwdPlan
+    forward_fourier_transform::FwdTransform
+    inverse_fourier_transform::BwdTransform
 end
 
 function FFCMConfig{T}(;
@@ -114,7 +114,7 @@ function FFCMConfig{T}(;
     original_index = Vector{Int32}(undef, N)
     cell_start = Vector{Int32}(undef, num_cells_total)
     cell_end = Vector{Int32}(undef, num_cells_total)
-    cell_cursor = Vector{Int32}(undef, num_cells_total)
+    next_free_slot = Vector{Int32}(undef, num_cells_total)
     Y_sorted = Matrix{T}(undef, 3, N)
     F_sorted = Matrix{T}(undef, 3, N)
     # Scratch the assembled `mobility!` driver folds the caller's positions into,
@@ -124,38 +124,38 @@ function FFCMConfig{T}(;
     σ = a / sqrt(T(π))
     Σ = Σ_over_σ * σ
 
-    Δx_per_axis = ntuple(i -> L[i] / num_grid_points[i], 3)
+    h_per_axis = ntuple(i -> L[i] / num_grid_points[i], 3)
     rel_tol = sqrt(eps(T))
-    isotropic = abs(Δx_per_axis[2] - Δx_per_axis[1]) ≤ rel_tol * Δx_per_axis[1] &&
-                abs(Δx_per_axis[3] - Δx_per_axis[1]) ≤ rel_tol * Δx_per_axis[1]
+    isotropic = abs(h_per_axis[2] - h_per_axis[1]) ≤ rel_tol * h_per_axis[1] &&
+                abs(h_per_axis[3] - h_per_axis[1]) ≤ rel_tol * h_per_axis[1]
     isotropic || throw(ArgumentError(
-        "anisotropic grid spacing not supported (paper §3 assumes uniform Δx); " *
-        "L_i/M_i = $(Δx_per_axis)",
+        "anisotropic grid spacing not supported (paper §3 assumes uniform h); " *
+        "L_i/M_i = $(h_per_axis)",
     ))
-    Δx = Δx_per_axis[1]
-    inv_Δx = one(T) / Δx
+    h = h_per_axis[1]
+    inv_h = one(T) / h
 
     M_x, M_y, M_z = num_grid_points
     fx = zeros(T, M_x, M_y, M_z)
     fy = zeros(T, M_x, M_y, M_z)
     fz = zeros(T, M_x, M_y, M_z)
-    force_grid = StructArray{SVector{3, T}}((fx, fy, fz))
+    force_density = StructArray{SVector{3, T}}((fx, fy, fz))
 
     M_G_i32 = Int32(M_G)
-    gauss_x = Vector{T}(undef, M_G_i32)
-    gauss_y = Vector{T}(undef, M_G_i32)
-    gauss_z = Vector{T}(undef, M_G_i32)
+    gaussian_x = Vector{T}(undef, M_G_i32)
+    gaussian_y = Vector{T}(undef, M_G_i32)
+    gaussian_z = Vector{T}(undef, M_G_i32)
     r²_x = Vector{T}(undef, M_G_i32)
     r²_y = Vector{T}(undef, M_G_i32)
     r²_z = Vector{T}(undef, M_G_i32)
-    ind_x = Vector{Int32}(undef, M_G_i32)
-    ind_y = Vector{Int32}(undef, M_G_i32)
-    ind_z = Vector{Int32}(undef, M_G_i32)
+    idx_x = Vector{Int32}(undef, M_G_i32)
+    idx_y = Vector{Int32}(undef, M_G_i32)
+    idx_z = Vector{Int32}(undef, M_G_i32)
 
     ux = zeros(T, M_x, M_y, M_z)
     uy = zeros(T, M_x, M_y, M_z)
     uz = zeros(T, M_x, M_y, M_z)
-    velocity_grid = StructArray{SVector{3, T}}((ux, uy, uz))
+    fluid_velocity = StructArray{SVector{3, T}}((ux, uy, uz))
 
     fft_M_x = M_x ÷ Int32(2) + Int32(1)
     fh_x = zeros(Complex{T}, fft_M_x, M_y, M_z)
@@ -174,15 +174,15 @@ function FFCMConfig{T}(;
         for k in 1:M_z
     ]
 
-    forward_plan = plan_rfft(fx)
-    backward_plan = plan_brfft(fh_x, Int(M_x))
+    forward_fourier_transform = plan_rfft(fx)
+    inverse_fourier_transform = plan_brfft(fh_x, Int(M_x))
 
     return FFCMConfig{
         T,
-        typeof(force_grid),
+        typeof(force_density),
         typeof(fluid_hat),
-        typeof(forward_plan),
-        typeof(backward_plan),
+        typeof(forward_fourier_transform),
+        typeof(inverse_fourier_transform),
     }(
         L,
         R_c,
@@ -193,7 +193,7 @@ function FFCMConfig{T}(;
         original_index,
         cell_start,
         cell_end,
-        cell_cursor,
+        next_free_slot,
         Y_sorted,
         F_sorted,
         Y_wrapped,
@@ -202,25 +202,25 @@ function FFCMConfig{T}(;
         Σ,
         num_grid_points,
         M_G_i32,
-        Δx,
-        inv_Δx,
-        force_grid,
-        gauss_x,
-        gauss_y,
-        gauss_z,
+        h,
+        inv_h,
+        force_density,
+        gaussian_x,
+        gaussian_y,
+        gaussian_z,
         r²_x,
         r²_y,
         r²_z,
-        ind_x,
-        ind_y,
-        ind_z,
+        idx_x,
+        idx_y,
+        idx_z,
         μ,
-        velocity_grid,
+        fluid_velocity,
         fluid_hat,
         k_x,
         k_y,
         k_z,
-        forward_plan,
-        backward_plan,
+        forward_fourier_transform,
+        inverse_fourier_transform,
     )
 end

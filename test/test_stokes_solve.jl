@@ -31,16 +31,16 @@ const _STOKES_KWARGS = (;
 end
 
 @testset "Velocity grid mirrors the force grid: SoA StructArray of shape (M_x, M_y, M_z)" begin
-    # Step 5 (interpolation, future) will read velocity_grid[i_x, i_y, i_z]
-    # as an SVector{3, T} exactly as step 3 writes force_grid. The cold-path
+    # Step 5 (interpolation, future) will read fluid_velocity[i_x, i_y, i_z]
+    # as an SVector{3, T} exactly as step 3 writes force_density. The cold-path
     # layout pins that interface.
     M = (Int32(8), Int32(12), Int32(16))
     L = (4.0, 6.0, 8.0)
     config = FFCMConfig{Float64}(; _STOKES_KWARGS..., L = L, num_grid_points = M)
-    @test config.velocity_grid isa StructArray
-    @test size(config.velocity_grid) == (8, 12, 16)
-    @test eltype(config.velocity_grid) == SVector{3, Float64}
-    comps = components(config.velocity_grid)
+    @test config.fluid_velocity isa StructArray
+    @test size(config.fluid_velocity) == (8, 12, 16)
+    @test eltype(config.fluid_velocity) == SVector{3, Float64}
+    comps = components(config.fluid_velocity)
     @test length(comps) == 3
     @test all(c -> c isa Array{Float64, 3}, comps)
     @test all(c -> size(c) == (8, 12, 16), comps)
@@ -98,8 +98,8 @@ end
     # FFCMConfig's type parameters; failing to specialise here would
     # surface as a type-instability downstream.
     config = FFCMConfig{Float64}(; _STOKES_KWARGS...)
-    @test config.forward_plan !== nothing
-    @test config.backward_plan !== nothing
+    @test config.forward_fourier_transform !== nothing
+    @test config.inverse_fourier_transform !== nothing
 end
 
 @testset "Cold-path validation works for Float32 as well as Float64" begin
@@ -113,7 +113,7 @@ end
         μ = 1.5f0,
     )
     @test config.μ == 1.5f0
-    @test eltype(config.velocity_grid) == SVector{3, Float32}
+    @test eltype(config.fluid_velocity) == SVector{3, Float32}
     @test eltype(config.fluid_hat) == SVector{3, ComplexF32}
     @test eltype(config.k_x) == Float32
 end
@@ -132,7 +132,7 @@ end
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8, μ = T(1),
         )
-        fx, fy, fz = components(config.force_grid)
+        fx, fy, fz = components(config.force_density)
         # Deterministic non-mean-zero force field.
         for iz in axes(fx, 3), iy in axes(fx, 2), ix in axes(fx, 1)
             fx[ix, iy, iz] = T(ix) + T(iy) * T(0.3) - T(iz) * T(0.5) + T(1)
@@ -140,7 +140,7 @@ end
             fz[ix, iy, iz] = cos(T(ix) * T(iz)) * T(0.5) + T(0.3)
         end
         stokes_solve!(config)
-        ux, uy, uz = components(config.velocity_grid)
+        ux, uy, uz = components(config.fluid_velocity)
         atol = sqrt(eps(T))
         @test abs(sum(ux)) ≤ atol
         @test abs(sum(uy)) ≤ atol
@@ -166,7 +166,7 @@ end
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8, μ = T(1),
         )
-        fx, fy, fz = components(config.force_grid)
+        fx, fy, fz = components(config.force_density)
         for iz in axes(fx, 3), iy in axes(fx, 2), ix in axes(fx, 1)
             fx[ix, iy, iz] = sin(T(ix) * T(0.7)) * T(0.5)
             fy[ix, iy, iz] = cos(T(iy) + T(iz) * T(0.4))
@@ -175,16 +175,16 @@ end
 
         # Forward FFT + projection only; skip the destructive backward FFT.
         fx̂, fŷ, fẑ = components(config.fluid_hat)
-        mul!(fx̂, config.forward_plan, fx)
-        mul!(fŷ, config.forward_plan, fy)
-        mul!(fẑ, config.forward_plan, fz)
-        M_total = Int(config.num_grid_points[1]) * Int(config.num_grid_points[2]) *
+        mul!(fx̂, config.forward_fourier_transform, fx)
+        mul!(fŷ, config.forward_fourier_transform, fy)
+        mul!(fẑ, config.forward_fourier_transform, fz)
+        M = Int(config.num_grid_points[1]) * Int(config.num_grid_points[2]) *
                   Int(config.num_grid_points[3])
-        inv_M_total = one(T) / T(M_total)
+        inv_M = one(T) / T(M)
         _apply_inverse_stokes_kernel!(
             fx̂, fŷ, fẑ,
             config.k_x, config.k_y, config.k_z,
-            config.μ, inv_M_total,
+            config.μ, inv_M,
         )
 
         rtol = sqrt(eps(T))
@@ -222,20 +222,20 @@ end
         )
         m = 1
         kx_mode = T(2) * T(π) * T(m) / L[1]
-        fx, fy, fz = components(config.force_grid)
+        fx, fy, fz = components(config.force_density)
         for iz in 1:M_z, iy in 1:M_y, ix in 1:M_x
-            x = T(ix - 1) * config.Δx
+            x = T(ix - 1) * config.h
             fx[ix, iy, iz] = zero(T)
             fy[ix, iy, iz] = sin(kx_mode * x)
             fz[ix, iy, iz] = zero(T)
         end
         stokes_solve!(config)
-        ux, uy, uz = components(config.velocity_grid)
+        ux, uy, uz = components(config.fluid_velocity)
 
         scale = one(T) / (config.μ * kx_mode * kx_mode)
         atol = sqrt(eps(T)) * scale
         for iz in 1:M_z, iy in 1:M_y, ix in 1:M_x
-            x = T(ix - 1) * config.Δx
+            x = T(ix - 1) * config.h
             expected_y = scale * sin(kx_mode * x)
             @test isapprox(ux[ix, iy, iz], zero(T); atol = atol)
             @test isapprox(uy[ix, iy, iz], expected_y; atol = atol)
@@ -258,10 +258,10 @@ end
         α, β = T(1.7), -T(2.3)
 
         function solve_with(set_force!)
-            fx, fy, fz = components(config.force_grid)
+            fx, fy, fz = components(config.force_density)
             set_force!(fx, fy, fz)
             stokes_solve!(config)
-            ux, uy, uz = components(config.velocity_grid)
+            ux, uy, uz = components(config.fluid_velocity)
             return (copy(ux), copy(uy), copy(uz))
         end
 
@@ -316,12 +316,12 @@ end
         )
 
         function solve_with_force(base_force)
-            fx, fy, fz = components(config.force_grid)
+            fx, fy, fz = components(config.force_density)
             copyto!(fx, base_force[1])
             copyto!(fy, base_force[2])
             copyto!(fz, base_force[3])
             stokes_solve!(config)
-            ux, uy, uz = components(config.velocity_grid)
+            ux, uy, uz = components(config.fluid_velocity)
             return (copy(ux), copy(uy), copy(uz))
         end
 
@@ -353,7 +353,7 @@ end
     # Discretely, indices map under reflection as i ↦ mod1(M_i - i + 2, M_i).
     #
     # Odd grid dimensions are used here so there is no Nyquist mode on any
-    # axis. For even M the Nyquist mode (k = π/Δx) is its own conjugate-
+    # axis. For even M the Nyquist mode (k = π/h) is its own conjugate-
     # symmetric partner on the discrete grid, breaking exact reflection
     # equivariance of the projector at that single mode — a well-known
     # artefact of the r2c FFT layout, not a bug in the projector. The
@@ -375,12 +375,12 @@ end
                     for ix in 1:Mx, iy in 1:My, iz in 1:Mz]
 
         function solve(fx_, fy_, fz_)
-            fx, fy, fz = components(config.force_grid)
+            fx, fy, fz = components(config.force_density)
             copyto!(fx, fx_)
             copyto!(fy, fy_)
             copyto!(fz, fz_)
             stokes_solve!(config)
-            ux, uy, uz = components(config.velocity_grid)
+            ux, uy, uz = components(config.fluid_velocity)
             return (copy(ux), copy(uy), copy(uz))
         end
 
@@ -415,7 +415,7 @@ end
     # The inverse Stokes operator scales as 1/μ. Solving with the same
     # forcing at μ₀ and 2μ₀ produces velocity fields related by exactly a
     # factor of 2 — pinning that the μ parameter enters the kernel
-    # linearly through the per-mode scalar `α = 1/(μ k² M_total)`.
+    # linearly through the per-mode scalar `α = 1/(μ k² M)`.
     for T in (Float32, Float64)
         common_kwargs = (;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
@@ -429,7 +429,7 @@ end
         force_y = T[sin(T(ix) * T(0.3) + T(iy) * T(0.2) + T(iz) * T(0.1))
                     for ix in 1:8, iy in 1:8, iz in 1:8]
         for cfg in (config_low, config_high)
-            fx, fy, fz = components(cfg.force_grid)
+            fx, fy, fz = components(cfg.force_density)
             fill!(fx, zero(T))
             copyto!(fy, force_y)
             fill!(fz, zero(T))
@@ -438,9 +438,9 @@ end
         stokes_solve!(config_high)
 
         rtol = sqrt(eps(T))
-        for comp in 1:3, i in eachindex(components(config_low.velocity_grid)[comp])
-            u_lo = components(config_low.velocity_grid)[comp][i]
-            u_hi = components(config_high.velocity_grid)[comp][i]
+        for comp in 1:3, i in eachindex(components(config_low.fluid_velocity)[comp])
+            u_lo = components(config_low.fluid_velocity)[comp][i]
+            u_hi = components(config_high.fluid_velocity)[comp][i]
             @test isapprox(T(2) * u_hi, u_lo; atol = rtol, rtol = rtol)
         end
     end
@@ -481,8 +481,8 @@ end
     spread_forces!(config)
     stokes_solve!(config)
 
-    ux, uy, uz = components(config.velocity_grid)
-    Δx = config.Δx
+    ux, uy, uz = components(config.fluid_velocity)
+    h = config.h
     centre_idx = (Int(M) ÷ 2 + 1, Int(M) ÷ 2 + 1, Int(M) ÷ 2 + 1)
 
     @test ux[centre_idx...] > zero(T)
@@ -523,9 +523,9 @@ end
             M_G = 8,
             μ = T(1),
         )
-        # `force_grid` is zero-initialised at construction.
+        # `force_density` is zero-initialised at construction.
         stokes_solve!(config)
-        ux, uy, uz = components(config.velocity_grid)
+        ux, uy, uz = components(config.fluid_velocity)
         @test all(iszero, ux)
         @test all(iszero, uy)
         @test all(iszero, uz)

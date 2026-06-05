@@ -3,57 +3,57 @@
 
 Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 4 = §3
 Step `solve`). Apply the inverse Stokes operator `L^{-1}` to the spread
-force field in `config.force_grid` and write the resulting fluid
-velocity field to `config.velocity_grid`. Reads `config.force_grid`
-(populated by `spread_forces!`); writes `config.velocity_grid` and
+force field in `config.force_density` and write the resulting fluid
+velocity field to `config.fluid_velocity`. Reads `config.force_density`
+(populated by `spread_forces!`); writes `config.fluid_velocity` and
 overwrites `config.fluid_hat`.
 
 Operationally:
-  1. Forward r2c FFT each component of `force_grid` into the
+  1. Forward r2c FFT each component of `force_density` into the
      corresponding component of `fluid_hat`.
-  2. Apply `(I − k̂k̂ᵀ)/(μ k²) / M_total` per Fourier mode in place on
+  2. Apply `(I − k̂k̂ᵀ)/(μ k²) / M` per Fourier mode in place on
      `fluid_hat`; zero the `k = 0` mode (the mean-flow gauge fix).
   3. Backward c2r FFT each component of `fluid_hat` into the
-     corresponding component of `velocity_grid`.
+     corresponding component of `fluid_velocity`.
 
-The `1/M_total` factor compensates the unnormalised FFTW round-trip.
+The `1/M` factor compensates the unnormalised FFTW round-trip.
 
 Allocation-free and type-stable on `T <: AbstractFloat`.
 
 See `spec/stokes-solve.md`.
 """
 function stokes_solve!(config::FFCMConfig{T}) where {T}
-    fx, fy, fz = components(config.force_grid)
+    fx, fy, fz = components(config.force_density)
     fx̂, fŷ, fẑ = components(config.fluid_hat)
-    mul!(fx̂, config.forward_plan, fx)
-    mul!(fŷ, config.forward_plan, fy)
-    mul!(fẑ, config.forward_plan, fz)
+    mul!(fx̂, config.forward_fourier_transform, fx)
+    mul!(fŷ, config.forward_fourier_transform, fy)
+    mul!(fẑ, config.forward_fourier_transform, fz)
 
     M_x, M_y, M_z = config.num_grid_points
-    M_total = Int(M_x) * Int(M_y) * Int(M_z)
-    inv_M_total = one(T) / T(M_total)
+    M = Int(M_x) * Int(M_y) * Int(M_z)
+    inv_M = one(T) / T(M)
     _apply_inverse_stokes_kernel!(
         fx̂, fŷ, fẑ,
         config.k_x, config.k_y, config.k_z,
-        config.μ, inv_M_total,
+        config.μ, inv_M,
     )
 
-    ux, uy, uz = components(config.velocity_grid)
-    mul!(ux, config.backward_plan, fx̂)
-    mul!(uy, config.backward_plan, fŷ)
-    mul!(uz, config.backward_plan, fẑ)
+    ux, uy, uz = components(config.fluid_velocity)
+    mul!(ux, config.inverse_fourier_transform, fx̂)
+    mul!(uy, config.inverse_fourier_transform, fŷ)
+    mul!(uz, config.inverse_fourier_transform, fẑ)
     return config
 end
 
 """
     _apply_inverse_stokes_kernel!(
-        fx̂, fŷ, fẑ, k_x, k_y, k_z, μ, inv_M_total,
+        fx̂, fŷ, fẑ, k_x, k_y, k_z, μ, inv_M,
     ) -> nothing
 
 Function-barrier kernel for `stokes_solve!`. In-place Fourier-space
 projection: for each `(ix, iy, iz)` with
 `k = (k_x[ix], k_y[iy], k_z[iz])`, compute `k² = kᵀk`,
-`α = inv_M_total / (μ k²)`, `c = (k · f̂) / k²`, and replace
+`α = inv_M / (μ k²)`, `c = (k · f̂) / k²`, and replace
 `f̂ ← α · (f̂ − k · c)` component-wise. The `k = 0` mode is gauge-fixed
 to zero (paper §3; periodic Stokes is undefined there).
 
@@ -72,9 +72,9 @@ function _apply_inverse_stokes_kernel!(
     k_y::Vector{T},
     k_z::Vector{T},
     μ::T,
-    inv_M_total::T,
+    inv_M::T,
 ) where {T}
-    inv_μ_M = inv_M_total / μ
+    inv_μ_M = inv_M / μ
     zero_C = zero(Complex{T})
     @inbounds for iz in eachindex(k_z)
         kz = k_z[iz]

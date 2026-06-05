@@ -21,7 +21,7 @@ using FFCM: sort_particles_by_cell!, _build_cell_list_kernel!,
             $(config.original_index),
             $(config.cell_start),
             $(config.cell_end),
-            $(config.cell_cursor),
+            $(config.next_free_slot),
             $(config.cell_hash),
         )) == 0
         @test (@ballocated _gather_particles_kernel!(

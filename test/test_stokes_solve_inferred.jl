@@ -15,11 +15,11 @@ using StructArrays: components
         )
         @inferred stokes_solve!(config)
         fx̂, fŷ, fẑ = components(config.fluid_hat)
-        inv_M_total = one(T) / T(prod(Int, config.num_grid_points))
+        inv_M = one(T) / T(prod(Int, config.num_grid_points))
         @inferred _apply_inverse_stokes_kernel!(
             fx̂, fŷ, fẑ,
             config.k_x, config.k_y, config.k_z,
-            config.μ, inv_M_total,
+            config.μ, inv_M,
         )
     end
 end

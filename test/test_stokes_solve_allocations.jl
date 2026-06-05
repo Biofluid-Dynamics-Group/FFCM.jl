@@ -17,11 +17,11 @@ using StructArrays: components
         @test (@ballocated stokes_solve!($config)) == 0
 
         fx̂, fŷ, fẑ = components(config.fluid_hat)
-        inv_M_total = one(T) / T(prod(Int, config.num_grid_points))
+        inv_M = one(T) / T(prod(Int, config.num_grid_points))
         @test (@ballocated _apply_inverse_stokes_kernel!(
             $fx̂, $fŷ, $fẑ,
             $(config.k_x), $(config.k_y), $(config.k_z),
-            $(config.μ), $inv_M_total,
+            $(config.μ), $inv_M,
         )) == 0
     end
 end

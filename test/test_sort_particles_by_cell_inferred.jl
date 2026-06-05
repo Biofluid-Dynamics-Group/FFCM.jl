@@ -18,7 +18,7 @@ using FFCM: sort_particles_by_cell!, _build_cell_list_kernel!,
         @inferred sort_particles_by_cell!(config, Y, F)
         @inferred _build_cell_list_kernel!(
             config.original_index, config.cell_start, config.cell_end,
-            config.cell_cursor, config.cell_hash,
+            config.next_free_slot, config.cell_hash,
         )
         @inferred _gather_particles_kernel!(
             config.Y_sorted, config.F_sorted, Y, F, config.original_index,

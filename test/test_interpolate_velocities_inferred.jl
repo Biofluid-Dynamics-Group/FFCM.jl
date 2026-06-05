@@ -25,24 +25,24 @@ using FFCM: interpolate_velocities!, _interpolate_velocities_kernel!
         @inferred interpolate_velocities!(V, config)
         @inferred _interpolate_velocities_kernel!(
             V,
-            config.velocity_grid,
+            config.fluid_velocity,
             config.Y_sorted,
             config.original_index,
             config.σ,
             config.Σ,
-            config.Δx,
-            config.inv_Δx,
+            config.h,
+            config.inv_h,
             config.num_grid_points,
             config.M_G,
-            config.gauss_x,
-            config.gauss_y,
-            config.gauss_z,
+            config.gaussian_x,
+            config.gaussian_y,
+            config.gaussian_z,
             config.r²_x,
             config.r²_y,
             config.r²_z,
-            config.ind_x,
-            config.ind_y,
-            config.ind_z,
+            config.idx_x,
+            config.idx_y,
+            config.idx_z,
         )
     end
 end

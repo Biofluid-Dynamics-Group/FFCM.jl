@@ -10,7 +10,7 @@ _mobility_atol(::Type{Float32}) = 1.0f-6
 _mobility_atol(::Type{Float64}) = 1.0e-10
 
 # A small multi-particle configuration for the assembled-operator tests. Grid and
-# kernel widths follow the other step tests (Δx isotropic, M_G < M).
+# kernel widths follow the other step tests (h isotropic, M_G < M).
 function _mobility_test_config(::Type{T}, N) where {T}
     return FFCMConfig{T}(;
         L = (T(8), T(8), T(8)), R_c = T(1), N = N,

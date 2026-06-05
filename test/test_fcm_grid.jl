@@ -46,10 +46,10 @@ end
     )
 end
 
-@testset "Grid spacing Δx = L_i / M_i must be isotropic across axes (paper §3 assumption)" begin
+@testset "Grid spacing h = L_i / M_i must be isotropic across axes (paper §3 assumption)" begin
     config = FFCMConfig{Float64}(; _DEFAULT_KWARGS...)
-    @test config.Δx ≈ 4.0 / 8
-    @test config.inv_Δx ≈ 1 / config.Δx
+    @test config.h ≈ 4.0 / 8
+    @test config.inv_h ≈ 1 / config.h
 
     # Anisotropy in L with isotropy-violating M is rejected.
     @test_throws ArgumentError FFCMConfig{Float64}(;
@@ -59,13 +59,13 @@ end
     )
 end
 
-@testset "Anisotropic L is allowed when M restores per-axis Δx equality" begin
+@testset "Anisotropic L is allowed when M restores per-axis h equality" begin
     config = FFCMConfig{Float64}(;
         _DEFAULT_KWARGS...,
         L = (4.0, 8.0, 12.0),
         num_grid_points = (Int32(8), Int32(16), Int32(24)),
     )
-    @test config.Δx ≈ 0.5
+    @test config.h ≈ 0.5
 end
 
 @testset "Kernel grid support M_G is at least two grid points per axis" begin
@@ -95,10 +95,10 @@ end
         L = L,
         num_grid_points = M,
     )
-    @test config.force_grid isa StructArray
-    @test size(config.force_grid) == (8, 12, 16)
-    @test eltype(config.force_grid) == SVector{3, Float64}
-    components = StructArrays.components(config.force_grid)
+    @test config.force_density isa StructArray
+    @test size(config.force_density) == (8, 12, 16)
+    @test eltype(config.force_density) == SVector{3, Float64}
+    components = StructArrays.components(config.force_density)
     @test length(components) == 3
     @test all(c -> c isa Array{Float64, 3}, components)
     @test all(c -> size(c) == (8, 12, 16), components)
@@ -106,15 +106,15 @@ end
 
 @testset "Per-particle stencil scratch vectors are sized to the kernel support M_G" begin
     config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., M_G = 10)
-    @test length(config.gauss_x) == 10
-    @test length(config.gauss_y) == 10
-    @test length(config.gauss_z) == 10
+    @test length(config.gaussian_x) == 10
+    @test length(config.gaussian_y) == 10
+    @test length(config.gaussian_z) == 10
     @test length(config.r²_x) == 10
     @test length(config.r²_y) == 10
     @test length(config.r²_z) == 10
-    @test length(config.ind_x) == 10
-    @test length(config.ind_y) == 10
-    @test length(config.ind_z) == 10
+    @test length(config.idx_x) == 10
+    @test length(config.idx_y) == 10
+    @test length(config.idx_z) == 10
 end
 
 @testset "Cold-path validation works for Float32 as well as Float64" begin
@@ -129,6 +129,6 @@ end
     )
     @test config.σ ≈ 1.0f0 / sqrt(Float32(π))
     @test config.Σ ≈ 2.0f0 * config.σ
-    @test config.Δx ≈ 0.5f0
-    @test eltype(config.force_grid) == SVector{3, Float32}
+    @test config.h ≈ 0.5f0
+    @test eltype(config.force_density) == SVector{3, Float32}
 end

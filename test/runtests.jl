@@ -2,14 +2,14 @@ using Test
 
 # Test helper: picks `Σ_over_σ`, `num_grid_points`, and `M_G` for tests that
 # only exercise the step-1 / step-2 cell-list machinery and do not care
-# about the FCM grid. `num_grid_points` is sized so Δx is isotropic across
-# axes (paper §3 assumption); a target Δx of `L[1] / 8` works for every L
+# about the FCM grid. `num_grid_points` is sized so h is isotropic across
+# axes (paper §3 assumption); a target h of `L[1] / 8` works for every L
 # the existing tests use.
 function _fcm_grid_kwargs(L::NTuple{3, T}) where {T}
-    Δx_target = L[1] / 8
+    h_target = L[1] / 8
     return (
         Σ_over_σ = T(2),
-        num_grid_points = ntuple(i -> Int32(round(Int, L[i] / Δx_target)), 3),
+        num_grid_points = ntuple(i -> Int32(round(Int, L[i] / h_target)), 3),
         M_G = 8,
         μ = T(1),
     )

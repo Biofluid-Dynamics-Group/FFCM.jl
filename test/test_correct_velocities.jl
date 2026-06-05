@@ -74,11 +74,11 @@ function _T_tensor(x::SVector{3,T}, s::T, μ::T) where {T}
 end
 
 function _correction_tensor_oracle(x::SVector{3,T}, σ::T, Σ::T, μ::T) where {T}
-    pd = σ^2 - Σ^2
+    σ²_minus_Σ² = σ^2 - Σ^2
     sσ = σ * sqrt(T(2))
     sΣ = Σ * sqrt(T(2))
     return _S_tensor(x, sσ, μ) - _S_tensor(x, sΣ, μ) -
-           pd * _Q_tensor(x, sΣ, μ) - pd^2 / 4 * _T_tensor(x, sΣ, μ)
+           σ²_minus_Σ² * _Q_tensor(x, sΣ, μ) - σ²_minus_Σ²^2 / 4 * _T_tensor(x, sΣ, μ)
 end
 
 @testset "Standard-FCM degenerate limit (Σ = σ) gives zero correction" begin
@@ -136,23 +136,23 @@ end
         for Σ_over_σ in (T(1.25), T(2), T(3.5)), μ in (T(0.5), T(1), T(2.7))
             Σ = Σ_over_σ * σ
             Σπ = Σ * sqrt(T(π))
-            pd = σ^2 - Σ^2
+            σ²_minus_Σ² = σ^2 - Σ^2
             # Reference: appendix.tex:52-54, grouped term by term.
             stokes = one(T) / (T(6) * T(π) * μ * a)
             mod_stokes = one(T) / (T(6) * T(π) * μ * Σπ)
-            pd_term = pd / (T(12) * μ * Σπ^3)
-            bilap = pd^2 / (T(32) * μ * Σ^5 * T(π)^(T(3) / 2))
+            pd_term = σ²_minus_Σ² / (T(12) * μ * Σπ^3)
+            bilap = σ²_minus_Σ²^2 / (T(32) * μ * Σ^5 * T(π)^(T(3) / 2))
             reference = stokes - mod_stokes + pd_term - bilap
 
-            c_self = _self_correction(σ, Σ, a, μ)
-            @test c_self ≈ reference rtol = sqrt(eps(T))
+            self_correction_term = _self_correction(σ, Σ, a, μ)
+            @test self_correction_term ≈ reference rtol = sqrt(eps(T))
         end
     end
 end
 
 @testset "Isolated particle gets only the self term" begin
     # A particle with no neighbour within R_c receives only the diagonal self
-    # correction: V[:, n] += c_self · F_n.
+    # correction: V[:, n] += self_correction_term · F_n.
     for T in (Float32, Float64)
         config = _corr_config(T; N = 2)
         a, σ, Σ, μ = config.a, config.σ, config.Σ, config.μ

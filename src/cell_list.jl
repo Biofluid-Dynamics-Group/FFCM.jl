@@ -28,7 +28,7 @@ wrap_positions!(Y::AbstractMatrix{T}, L::NTuple{3, T}) where {T} =
 
 """
     _build_cell_list_kernel!(
-        original_index, cell_start, cell_end, cell_cursor, cell_hash,
+        original_index, cell_start, cell_end, next_free_slot, cell_hash,
     ) -> original_index
 
 Function-barrier kernel that counting-sorts the `N` particles by their
@@ -39,12 +39,12 @@ the sorted order, for cells `c ∈ 0:total-1` stored at array index `c + 1`.
 
 The sort is stable: particles sharing a cell keep their original relative
 order. An empty cell `c` yields `cell_end[c] = cell_start[c] - 1`, i.e. an
-empty range. `cell_cursor` is length-`total` scratch.
+empty range. `next_free_slot` is length-`total` scratch.
 
 Preconditions (the caller guarantees these, so the loops are `@inbounds`):
 `cell_hash[n] ∈ 0:total-1` for every particle `n`, where
 `total = length(cell_start)`; `original_index` has length `N`;
-`cell_start`, `cell_end`, `cell_cursor` all have length `total`.
+`cell_start`, `cell_end`, `next_free_slot` all have length `total`.
 
 See `spec/particle-sorting.md`.
 """
@@ -52,25 +52,25 @@ function _build_cell_list_kernel!(
     original_index::Vector{Int32},
     cell_start::Vector{Int32},
     cell_end::Vector{Int32},
-    cell_cursor::Vector{Int32},
+    next_free_slot::Vector{Int32},
     cell_hash::Vector{Int32},
 )
     total = length(cell_start)
-    fill!(cell_cursor, Int32(0))
+    fill!(next_free_slot, Int32(0))
     @inbounds for n in eachindex(cell_hash)
-        cell_cursor[cell_hash[n] + Int32(1)] += Int32(1)
+        next_free_slot[cell_hash[n] + Int32(1)] += Int32(1)
     end
     acc = Int32(1)
     @inbounds for c in 1:total
         cell_start[c] = acc
-        acc += cell_cursor[c]
+        acc += next_free_slot[c]
         cell_end[c] = acc - Int32(1)
-        cell_cursor[c] = cell_start[c]
+        next_free_slot[c] = cell_start[c]
     end
     @inbounds for n in eachindex(cell_hash)
         c = cell_hash[n] + Int32(1)
-        original_index[cell_cursor[c]] = Int32(n)
-        cell_cursor[c] += Int32(1)
+        original_index[next_free_slot[c]] = Int32(n)
+        next_free_slot[c] += Int32(1)
     end
     return original_index
 end
@@ -100,7 +100,7 @@ function sort_particles_by_cell!(
         config.original_index,
         config.cell_start,
         config.cell_end,
-        config.cell_cursor,
+        config.next_free_slot,
         config.cell_hash,
     )
     _gather_particles_kernel!(

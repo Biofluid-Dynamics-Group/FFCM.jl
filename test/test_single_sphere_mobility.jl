@@ -33,7 +33,7 @@ end
     #
     # This continuum sum captures every periodic finite-size correction
     # exactly; our discrete operator approximates it, with error set by the
-    # grid resolution (σ/Δx ≈ 2.26 here) and the M_G³ stencil truncation.
+    # grid resolution (σ/h ≈ 2.26 here) and the M_G³ stencil truncation.
     # The single test exercising all five steps composed.
     T = Float64
     L = (T(8), T(8), T(8))
@@ -43,7 +43,7 @@ end
         Σ_over_σ = T(1),
         μ = T(1),
         num_grid_points = (M, M, M),
-        # M_G = 21 (odd ⇒ symmetric stencil) reaches (M_G/2)Δx ≈ 4.65σ, so
+        # M_G = 21 (odd ⇒ symmetric stencil) reaches (M_G/2)h ≈ 4.65σ, so
         # the Gaussian is captured to ~2e-5 relative at the stencil edge.
         M_G = 21,
     )
@@ -72,7 +72,7 @@ end
     end
     self_mobility_xx /= Lx^3
 
-    # Grid-resolution / stencil-truncation limited (≈ 9e-7 at this σ/Δx),
+    # Grid-resolution / stencil-truncation limited (≈ 9e-7 at this σ/h),
     # not round-off; rtol = 1e-5 holds with ~10× margin.
     rtol = T(1e-5)
     @test V[1, 1] ≈ self_mobility_xx rtol = rtol
@@ -103,7 +103,7 @@ end
     L = (T(8), T(8), T(8))
     M = Int32(32)
     # M_G = 31 (odd ⇒ symmetric) captures the Σ-Gaussian to ~5e-6 tail mass even at
-    # Σ/σ = 1.5 ((M_G/2)Δx ≈ 4.6Σ); M_G < M = 32 so the stencil does not self-wrap.
+    # Σ/σ = 1.5 ((M_G/2)h ≈ 4.6Σ); M_G < M = 32 so the stencil does not self-wrap.
     M_G = 31
 
     σ = one(T) / sqrt(T(π))
