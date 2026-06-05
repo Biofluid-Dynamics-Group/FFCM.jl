@@ -15,7 +15,6 @@ include("interpolate.jl")
 include("correct_velocities.jl")
 include("mobility.jl")
 
-export FFCMConfig, spread_forces!, stokes_solve!, interpolate_velocities!,
-    correct_velocities!, mobility!, FFCMMobility
+export FFCMConfig, mobility!, FFCMMobility
 
 end

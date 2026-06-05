@@ -26,6 +26,7 @@ end
     include("test_sort_particles_by_cell_inferred.jl")
     include("test_sort_particles_by_cell_allocations.jl")
     include("test_fcm_grid.jl")
+    include("test_modified_kernel_coefficients.jl")
     include("test_spread_forces.jl")
     include("test_spread_forces_inferred.jl")
     include("test_spread_forces_allocations.jl")
@@ -42,6 +43,7 @@ end
     include("test_mobility_inferred.jl")
     include("test_mobility_allocations.jl")
     include("test_single_sphere_mobility.jl")
+    include("test_exported_surface.jl")
     include("test_aqua.jl")
     include("test_jet.jl")
 end

@@ -1,4 +1,42 @@
 """
+    _modified_kernel_coefficients(σ, Σ) -> NTuple{4, T}
+
+Closed-form scalars of the modified FCM kernel (Su & Keaveny 2024, §3
+equation (22)). The modified kernel `(1 + (σ² − Σ²)/2 · Δ) Δ(x; Σ)` collapses,
+once the Laplacian acts on the isotropic Gaussian `Δ(x; Σ)`, to the polynomial
+form `(a₀ + a₂·r²)·Δ(x; Σ)`, evaluated through the separable 1-D Gaussian
+weight `inv_norm·exp(−x²·inv_2Σ²)` per axis. Force spreading
+(`_spread_forces_kernel!`) and velocity interpolation
+(`_interpolate_velocities_kernel!`) share these four scalars verbatim, because
+interpolation is the exact discrete adjoint of spreading; centralising them
+here keeps the eq-(22) expansion in one place. Pure and allocation-free; called
+once per kernel invocation, before the per-particle loop.
+
+# Arguments
+- `σ::T`: the physical FCM kernel width, `σ = a/√π` for a unit-radius particle.
+- `Σ::T`: the (wider) modified-kernel width, `Σ ≥ σ`.
+
+# Returns
+- `NTuple{4, T}`: `(a₀, a₂, inv_norm, inv_2Σ²)`, where
+  `a₀ = 1 − 3(σ²−Σ²)/(2Σ²)` and `a₂ = (σ²−Σ²)/(2Σ⁴)` are the polynomial
+  coefficients, `inv_norm = 1/√(2πΣ²)` the Gaussian normalisation, and
+  `inv_2Σ² = 1/(2Σ²)` the exponent scale. At the standard-FCM limit `Σ = σ`
+  the prefactor degenerates to `a₀ = 1`, `a₂ = 0` (the unmodified Gaussian).
+
+See `spec/force-spreading.md` and `spec/interpolation.md`.
+"""
+function _modified_kernel_coefficients(σ::T, Σ::T) where {T}
+    Σ² = Σ * Σ
+    Σ⁴ = Σ² * Σ²
+    σ²_minus_Σ² = σ * σ - Σ²
+    a_0 = one(T) - T(3) * σ²_minus_Σ² / (T(2) * Σ²)
+    a_2 = σ²_minus_Σ² / (T(2) * Σ⁴)
+    inv_norm = one(T) / sqrt(T(2) * T(π) * Σ²)
+    inv_2Σ² = one(T) / (T(2) * Σ²)
+    return (a_0, a_2, inv_norm, inv_2Σ²)
+end
+
+"""
     _fill_particle_stencil!(
         gaussian_x, gaussian_y, gaussian_z,
         r²_x, r²_y, r²_z,

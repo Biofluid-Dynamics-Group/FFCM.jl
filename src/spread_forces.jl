@@ -84,13 +84,7 @@ function _spread_forces_kernel!(
     fill!(fy, zero(T))
     fill!(fz, zero(T))
 
-    Σ² = Σ * Σ
-    Σ⁴ = Σ² * Σ²
-    σ²_minus_Σ² = σ * σ - Σ²
-    a_0 = one(T) - T(3) * σ²_minus_Σ² / (T(2) * Σ²)
-    a_2 = σ²_minus_Σ² / (T(2) * Σ⁴)
-    inv_norm = one(T) / sqrt(T(2) * T(π) * Σ²)
-    inv_2Σ² = one(T) / (T(2) * Σ²)
+    a_0, a_2, inv_norm, inv_2Σ² = _modified_kernel_coefficients(σ, Σ)
 
     half_M_G = M_G ÷ Int32(2)
 
