@@ -6,16 +6,16 @@ Step 3 of the Fast FCM algorithm (Su & Keaveny 2024, §4).
 
 The spreading operator $\tilde{\mathcal{J}}^\dagger$ is applied to the forces $\left(\boldsymbol{F}\right)_{n = 1}^N$ to create the right-hand-side for the Stokes problem. This operator is defined as
 $$\begin{align*}
-    \tilde{\mathcal{J}}^\dagger : \left[\R^3\right]^N &\to \boldsymbol{L}^{2}\left(\Omega\right) \\
-    \left(\boldsymbol{F}\right)_{i = 1}^N &\mapsto \sum_{n = 1}^N \boldsymbol{F}_n \tilde{\Delta}_n\left(\cdot; \Sigma\right) \quad \text{(§3)} \text{,}
+    \tilde{\mathcal{J}}^\dagger : \left[\mathbb{R}^3\right]^N &\to \boldsymbol{L}^{2}\left(\Omega\right) \\
+    \left(\boldsymbol{F}\right)_{n = 1}^N &\mapsto \sum_{n = 1}^N \boldsymbol{F}_n \tilde{\Delta}_n\left(\cdot; \Sigma\right) \quad \text{(§3, equation (25))} \text{,}
 \end{align*}$$
 where $\tilde{\Delta}_n\left(\cdot; \Sigma\right)$ is the Fast FCM Gaussian kernel with width $\Sigma$, defined as
 $$
     \tilde{\Delta}_n\left(\boldsymbol{x}; \Sigma\right) \coloneqq \left(1 + \frac{\sigma^2 - \Sigma^2}{2} \Delta \right) \Delta_n\left(\boldsymbol{x}; \Sigma\right) \quad \text{(§3, equation (22))}\text{.}
 $$
-$\Delta_n(\boldsymbol{x}, \sigma)$ is, in turn, the original Gaussian kernel (with width $\sigma$, its second argument). That is,
+$\Delta_n(\boldsymbol{x}; \sigma)$ is, in turn, the original Gaussian kernel (with width $\sigma$, its second argument). That is,
 $$
-  \Delta_n(\boldsymbol{x}; \sigma) = \frac{1}{\left(2\pi\sigma^2\right)^3} e^{\frac{-\left\lvert \boldsymbol{x} - \boldsymbol{Y}_n \right\rvert^2}{2\sigma^2}} \quad \text{(§2, equation (1))}\text{,}
+  \Delta_n(\boldsymbol{x}; \sigma) = \frac{1}{\left(2\pi\sigma^2\right)^{\frac{3}{2}}} e^{\frac{-\left\lvert \boldsymbol{x} - \boldsymbol{Y}_n \right\rvert^2}{2\sigma^2}} \quad \text{(§2, equation (1))}\text{,}
 $$
 where $\boldsymbol{Y}_n$ is the position of particle $n$.
 
@@ -23,7 +23,7 @@ The idea behind this kernel is to use $\Sigma \geq \sigma$, i.e. spread the forc
 
 Note that the Gaussian kernel in the original FCM is set to be $\sigma = \frac{a}{\sqrt{\pi}}$, so that FCM recovers the Stokes drag law for a single particle if its radius is $a$ (§2). Thus, $\sigma$ is set by the particle radius, and $\Sigma$ is variable to accelerate the method. For numerical reasons, it is reasonable to assume the particle radius $a$ as our length scale, so that all dimensions are expressed in terms of $a$.
 
-It is easy (if we distinguish that $\Delta$ is the Laplacian operator and $\Delta_n$ is a Gaussian kernel) to show that
+Distinguishing the Laplacian $\Delta$ from the Gaussian kernel $\Delta_n$, a direct computation gives
 $$
   \Delta \Delta_n(\boldsymbol{x}; \Sigma) = \left( \frac{\left\lvert \boldsymbol{x} - \boldsymbol{Y}_n \right\rvert^2}{\Sigma^4} - \frac{3}{\Sigma^2} \right) \Delta_n\left(\boldsymbol{x}; \Sigma\right) \text{,}
 $$
@@ -39,384 +39,279 @@ In the code, we define
 - `σ` $= \sigma$,
 - `Σ` $= \Sigma$,
 - `num_grid_points` $= (M_x, M_y, M_z)$,
-- `M\_G` $= M_G$,
-- `h` $= h_x = h_y = h_z$, (REFACTOR NOTE: currently, `h` is `\Delta x`. This should be changed for clarity to `h`.)
+- `M_G` $= M_G$,
+- `h` $= h$ — the uniform grid spacing $h = \frac{L_i}{M_i}$, equal across axes,
 - `a` $= a = 1$,
 - `Σ_over_σ` $= \frac{\Sigma}{\sigma}$, the actual control parameter, see §5 in the paper.
 
+## Method
 
-## Notation (paper-consistent)
+### The spread on the grid
 
-Following paper notation conventions (paper §2 onward; CLAUDE.local.md
-*Notation conventions*):
+Sampled on the grid and truncated to each particle's stencil, the spreading operator evaluates to
+$$
+\tilde{\mathcal{J}}^\dagger[\mathcal{F}](\boldsymbol{x}_g)
+= \sum_{n=1}^N \boldsymbol{F}_n \bigl(a_0 + a_2 r_n^2\bigr) \Delta_n(\boldsymbol{x}_g; \Sigma),
+\qquad r_n = \lvert \boldsymbol{x}_g - \boldsymbol{Y}_n \rvert,
+$$
+at every grid point $\boldsymbol{x}_g$, with each particle contributing only to the $M_G^3$ grid points of its stencil. This is the quantity `spread_forces!` writes into `force_density`, using the closed form of $\tilde{\Delta}_n$ derived in the Summary.
 
-- `i ∈ {x, y, z}` (equivalently `{1, 2, 3}`) — Cartesian axis index.
-- `n ∈ {1, …, N}` — particle index.
-- `Y[i, n]` is the `i`-th component of particle `n`'s position; `F[i, n]`
-  likewise for force. Paper symbols `Y_n`, `F_n` map to the `n`-th column.
-- `(M_x, M_y, M_z)` (paper §3, `outline.tex:175`) — number of grid points
-  per axis. Bundled in code as `num_grid_points::NTuple{3, Int32}` (long
-  form per the convention that the paper does not bundle them under a
-  single symbol).
-- `M_G` (paper §5, `outline.tex:571`) — kernel grid-support per axis. The
-  paper-supplied stencil is $M_G \times M_G \times M_G$.
-- `Δx` (paper §3, `outline.tex:175`) — uniform grid spacing.
-- `a` (paper §2, `outline.tex:163`) — particle hydrodynamic radius.
-- `σ` (paper §2, eq 148 / `outline.tex:147-149`) — FCM Gaussian envelope.
-  Derived from `a` by $a = \sigma\sqrt{\pi}$.
-- `Σ` (paper §3, eq 267 / `outline.tex:265-269`) — fast-FCM modified-kernel
-  width. Constrained by $\Sigma \geq \sigma$.
-- `Σ/σ` (paper §5, `outline.tex:573`) — the fast-FCM resolution control
-  parameter; user-supplied via `Σ_over_σ`.
+### Separability of the Gaussian
+
+With the one-dimensional Gaussian $g(s; \Sigma) = (2\pi\Sigma^2)^{-1/2}\exp(-s^2 / 2\Sigma^2)$, the isotropic three-dimensional Gaussian factors per axis,
+$$
+\Delta_n(\boldsymbol{x}_g; \Sigma)
+= g\bigl(x_{i_x} - Y_{n,1}; \Sigma\bigr)
+  g\bigl(y_{i_y} - Y_{n,2}; \Sigma\bigr)
+  g\bigl(z_{i_z} - Y_{n,3}; \Sigma\bigr),
+$$
+so the three-dimensional normalisation $(2\pi\Sigma^2)^{-3/2}$ is the product of three one-dimensional factors $(2\pi\Sigma^2)^{-1/2}$. The code therefore stores a single per-axis `inv_norm = 1/√(2πΣ²)` and multiplies three of them. The squared distance likewise splits per axis,
+$$
+r_n^2 = (x_{i_x} - Y_{n,1})^2 + (y_{i_y} - Y_{n,2})^2 + (z_{i_z} - Y_{n,3})^2 .
+$$
+Per particle, the kernel precomputes the three one-dimensional weight vectors (`gaussian_x/y/z`, $\mathcal{O}(M_G)$ exponentials each) and the three axis-squared-distance vectors (`r²_x/y/z`); the inner $M_G^3$ loop then assembles $\tilde{\Delta}_n$ with three multiplies and the polynomial factor $(a_0 + a_2 r_n^2)$, evaluating no further exponentials.
+
+### Per-particle stencil — nearest-anchored
+
+For axis $i \in \{1, 2, 3\}$ and particle $n$, the stencil is anchored at the nearest grid point,
+$$
+j_i = \operatorname{round}\!\bigl(Y_{n,i} / h\bigr)
+\qquad \text{(Julia: `round(Int32, Y/h, RoundNearestTiesToEven)`)} .
+$$
+The stencil grid coordinates on axis $i$ are $x^{(s)}_i = \bigl(j_i - \lfloor M_G/2 \rfloor + s\bigr)h$ for $s = 0, \dots, M_G - 1$, and the corresponding periodic grid index is $\bigl(j_i - \lfloor M_G/2 \rfloor + s\bigr) \bmod M_i$, mapped to 1-based as `mod(·, M_i) + 1`. For odd $M_G$ the stencil is symmetric about $j_i$; for even $M_G$ it covers $\lfloor M_G/2 \rfloor$ points below $j_i$ and $\lceil M_G/2 \rceil - 1$ above. The nearest-grid-point anchor is an implementation convention (matching the reference implementation); the $(M_G, \Sigma/h)$ accuracy calibration it serves is given in §5 (Table 1 and Fig. 1(a)).
+
+### The limit $\Sigma = \sigma$
+
+At $\Sigma = \sigma$ the coefficients collapse to $a_0 = 1$, $a_2 = 0$, so $\tilde{\Delta}_n = \Delta_n$ and the spread is identical to the standard-FCM monopole spread at the same grid spacing. No separate code path is needed; the polynomial factor becomes the constant 1.
 
 ## Contract
 
 ### Cold-path input (user-supplied to `FFCMConfig`)
 
-- `a::T = T(1)` — particle radius. **Must equal `T(1)` in the current
-  implementation.** Any other value triggers
-  `error("non-unit particle radius not yet implemented")`. The parameter
-  is exposed as a documented contract placeholder for a future
-  generalisation. The CLAUDE.md project contract sets the unit-radius
-  convention.
-- `Σ_over_σ::T` — required; the ratio $\Sigma/\sigma$ from paper §5
-  (`outline.tex:573`). Must satisfy $\Sigma_\mathrm{over\_\sigma} \geq T(1)$;
-  the equality case $\Sigma = \sigma$ is the standard-FCM degenerate
-  limit (see *Standard FCM via degenerate limit* below). The paper's
-  strict inequality $\Sigma > \sigma$ (eq 269) is the regime where the
-  fast-FCM cost reduction applies; equality is supported because it is
-  algorithmically free and useful for validation.
-- `num_grid_points::NTuple{3, Int32}` — required; the per-axis grid
-  dimensions $(M_x, M_y, M_z)$. Each component must be at least 1.
-- `M_G::Integer` — required; the kernel stencil width per axis. Stored
-  as `Int32`. Must be at least 2.
+- `a::T = T(1)` — particle radius. **Must equal `T(1)`** in the current
+  implementation; any other value is rejected (⚑ currently raised via
+  `error(...)`; should become an `ArgumentError`). The unit-radius convention is
+  set by CLAUDE.md.
+- `Σ_over_σ::T` — required; the ratio $\frac{\Sigma}{\sigma}$ (paper §5). Must
+  satisfy $\frac{\Sigma}{\sigma} \geq 1$. The equality case $\Sigma = \sigma$
+  reduces to standard FCM; the strict inequality $\Sigma > \sigma$ is the regime
+  where fast FCM reduces cost. Equality is supported because it is free and useful
+  for validation.
+- `num_grid_points::NTuple{3, Int32}` — required; the per-axis grid dimensions
+  $(M_x, M_y, M_z)$. Each component must be at least 1.
+- `M_G::Integer` — required; the cubic stencil width per axis. Stored as `Int32`;
+  must be at least 2.
 
-The existing cold-path inputs from steps 1 and 2 (`L`, `R_c`, `N`) are
-unchanged.
+The cold-path inputs from steps 1–2 (`L`, `R_c`, `N`) are unchanged.
 
 ### Cold-path derived state (computed once, stored on `FFCMConfig`)
 
 | Field | Type | Definition |
 |---|---|---|
-| `σ` | `T` | $\sigma = a / \sqrt{\pi}$ (paper §2, `outline.tex:163`). |
-| `Σ` | `T` | $\Sigma = (\Sigma/\sigma) \cdot \sigma$ (paper §3, eq 267). |
-| `num_grid_points` | `NTuple{3, Int32}` | The user input. |
+| `σ` | `T` | $\sigma = \frac{a}{\sqrt{\pi}}$ (paper §2). |
+| `Σ` | `T` | $\Sigma = \frac{\Sigma}{\sigma}\sigma$ (paper §3). |
+| `num_grid_points` | `NTuple{3, Int32}` | The user input $(M_x, M_y, M_z)$. |
 | `M_G` | `Int32` | The user input. |
-| `Δx` | `T` | Uniform grid spacing $L_i / M_i$, equal across axes (validated). |
-| `inv_Δx` | `T` | Precomputed $1 / \Delta x$ (hot path multiplies). |
-| `force_grid` | `StructArray{SVector{3, T}, 3, …}` | Shape `(M_x, M_y, M_z)`; SoA-backed three-component vector field. See *Storage choice*. |
-| `gauss_x`, `gauss_y`, `gauss_z` | `Vector{T}` | Length `M_G`; per-particle 1-D Gaussian weights, written every spread call. |
-| `r²_x`, `r²_y`, `r²_z` | `Vector{T}` | Length `M_G`; per-particle axis-squared distances. |
-| `ind_x`, `ind_y`, `ind_z` | `Vector{Int32}` | Length `M_G`; per-particle 1-based stencil grid indices (after periodic wrap). |
+| `h` | `T` | Uniform grid spacing $\frac{L_i}{M_i}$, equal across axes (validated). |
+| `inv_h` | `T` | Precomputed $\frac{1}{h}$ (the hot path multiplies). |
+| `force_density` | `StructArray{SVector{3, T}, 3, …}` | Shape $(M_x, M_y, M_z)$; three-component vector field, struct-of-arrays backed. |
+| `gaussian_x`, `gaussian_y`, `gaussian_z` | `Vector{T}` | Length $M_G$; per-particle 1-D Gaussian weights. |
+| `r²_x`, `r²_y`, `r²_z` | `Vector{T}` | Length $M_G$; per-particle axis-squared distances. |
+| `idx_x`, `idx_y`, `idx_z` | `Vector{Int32}` | Length $M_G$; per-particle 1-based periodic-wrapped stencil indices. |
 
-Cold-path validation (constructor):
+Cold-path validation (constructor): `a == T(1)`; $\frac{\Sigma}{\sigma} \geq 1$;
+$M_G \geq 2$; all `num_grid_points[i] ≥ 1`; isotropic spacing
+$\frac{L_x}{M_x} = \frac{L_y}{M_y} = \frac{L_z}{M_z}$ within $\sqrt{\mathrm{eps}(T)}$
+relative tolerance. ⚑ The precondition $M_G \leq \min(M_x, M_y, M_z)$ is not yet
+validated; it is what makes the inner-loop `@simd` argument (Performance notes)
+correct.
 
-- `a == T(1)` else `error("non-unit particle radius not yet implemented")`.
-- `Σ_over_σ ≥ T(1)` else `ArgumentError("Σ/σ must be at least 1; got ...")`.
-- `M_G ≥ 2` else `ArgumentError`.
-- All `num_grid_points[i] ≥ 1` else `ArgumentError`.
-- $L_x/M_x = L_y/M_y = L_z/M_z$ within $\sqrt{\mathrm{eps}(T)}$ relative
-  tolerance else `ArgumentError("anisotropic grid spacing not supported")`.
+### Hot-path input (per `mobility!` call, populated by steps 1–2)
 
-The existing validation from steps 1 and 2 (`L > 0`, `R_c > 0`, `N > 0`)
-is retained.
-
-### Hot-path input (per `mobility!` call, populated by steps 1 and 2)
-
-- `config.Y_sorted::Matrix{T}`, `config.F_sorted::Matrix{T}` (shape
-  `(3, N)`) — sorted positions and forces from
-  `sort_particles_by_cell!`.
+- `config.Y_sorted`, `config.F_sorted` (shape $(3, N)$) — sorted positions and
+  forces from `sort_particles_by_cell!`.
 
 ### Hot-path output
 
-- `config.force_grid` populated with
-  $\widetilde{\mathcal{J}}^\dagger[\mathcal{F}](\bm{x}_g)$ at every grid
-  point $\bm{x}_g = ((i_x-1)\Delta x, (i_y-1)\Delta x, (i_z-1)\Delta x)$
-  for $i_x \in 1{:}M_x$, $i_y \in 1{:}M_y$, $i_z \in 1{:}M_z$.
+- `config.force_density` populated with $\tilde{\mathcal{J}}^\dagger[\mathcal{F}](\boldsymbol{x}_g)$
+  at every grid point $\boldsymbol{x}_g = ((i_x - 1)h, (i_y - 1)h, (i_z - 1)h)$
+  for $i_x \in 1{:}M_x$, $i_y \in 1{:}M_y$, $i_z \in 1{:}M_z$. The grid is zeroed
+  at the start of the call.
 
-The scratch buffers (`gauss_*`, `r²_*`, `ind_*`) are overwritten with
-the last particle's per-axis precomputed values; they carry no
-between-call invariant.
+The scratch buffers (`gaussian_*`, `r²_*`, `idx_*`) are overwritten with the last
+particle's per-axis values; they carry no between-call invariant.
 
 ### Periodicity contract
 
-Particle positions enter `spread_forces!` after `wrap_positions!` from
-step 1, so $Y^n_i \in [0, L_i)$ is guaranteed. The stencil for each
-particle is wrapped mod $M_i$ inside the kernel; the resulting grid
-indices lie in $1{:}M_i$ for each axis. A particle near the domain
-edge spreads to a stencil that wraps to the opposite side, identically
-to a particle in the interior.
+Positions enter `spread_forces!` after `wrap_positions!` (step 1), so
+$Y_{n,i} \in [0, L_i)$. Each particle's stencil is wrapped $\bmod\ M_i$ inside the
+kernel, so the resulting grid indices lie in $1{:}M_i$. A particle near the domain
+edge spreads to a stencil that wraps to the opposite side, identically to an
+interior particle.
 
 ### Boundary cases
 
-- **Particle exactly on a grid point** (after wrap). The closed-form
-  $\widetilde{\Delta}_n$ is evaluated at distance 0 along each axis with
-  weight $a_0 \cdot (2\pi\Sigma^2)^{-3/2}$. No special case.
-- **Particle exactly on a cell midpoint** (`Y/Δx = j + 0.5`). The
-  nearest-anchored stencil tie-breaks via `RoundNearestTiesToEven`
-  (Julia default, matching cuFCM's `my_rint`). Either neighbouring
-  stencil is accepted; tests do not pin which one.
-- **`Σ = σ` degenerate limit.** $a_0 = 1$, $a_2 = 0$, so
-  $\widetilde{\Delta}_n = \Delta_n$. The polynomial multiplication runs
-  but produces a no-op factor.
+- **Particle exactly on a grid point** (after wrap): distance 0 along each axis;
+  no special case.
+- **Particle exactly on a cell midpoint** ($Y/h = j + 0.5$): the nearest-anchored
+  stencil tie-breaks via `RoundNearestTiesToEven`. Either neighbouring stencil is
+  accepted; tests do not pin which.
+- **$\Sigma = \sigma$**: $a_0 = 1$, $a_2 = 0$, so $\tilde{\Delta}_n = \Delta_n$
+  and the spread reduces to standard FCM.
 
-## API
+## Implementation
 
-```julia
-"""
-    FFCMConfig{T}(; L, R_c, N, a = T(1), Σ_over_σ, num_grid_points, M_G)
+`spread_forces!(config)` is the hot-path entry point. It reads the sorted
+positions and forces `config.Y_sorted`, `config.F_sorted`, writes the spread force
+field into `config.force_density` (zeroed at the start of the call), and returns
+`config`. It allocates nothing and is type-stable, so it can run on every
+iteration of a downstream solve. The grid and the per-particle scratch buffers are
+built once on the cold path, by the `FFCMConfig` constructor (its inputs and
+validation are listed under Contract).
 
-Cold-path configuration of the Fast FCM mobility operator. Owns the cell
-geometry (steps 1, 2) and the FCM grid (this step), plus all hot-path
-buffers sized for `N` particles and the chosen grid. Built once, reused
-across many `mobility!` calls.
+The hot path delegates to two function-barrier kernels that take naked arrays and
+scalars rather than the `config`. The barrier gives the compiler a concrete-typed
+call to specialise (which keeps the loop type-stable and allocation-free) and lets
+each kernel be exercised in isolation by the tests:
 
-Keyword arguments specific to step 3:
+- `_spread_forces_kernel!` zeroes the three grid components, computes the scalar
+  coefficients $a_0$ and $a_2$ once, then loops over the sorted particles,
+  accumulating $\boldsymbol{F}_n(a_0 + a_2 r_n^2)g_x g_y g_z$ into the
+  components of `force_density`.
+- `_fill_particle_stencil!` computes, for one particle, the per-axis Gaussian
+  weights `gaussian_x/y/z`, the axis-squared distances `r²_x/y/z`, and the
+  periodic-wrapped 1-based indices `idx_x/y/z` of its $M_G^3$ stencil. It is shared
+  verbatim with interpolation ([interpolation.md](interpolation.md)): interpolation
+  is the exact discrete adjoint of the spread, so both must place and weight the
+  stencil identically, and keeping the convention in one function is what
+  guarantees that.
 
-- `a::T = T(1)` — particle hydrodynamic radius. Only `a == T(1)` is
-  currently supported (paper §2; CLAUDE.md unit-radius convention).
-- `Σ_over_σ::T` — kernel resolution ratio Σ/σ (paper §5,
-  `outline.tex:573`); must satisfy `Σ_over_σ ≥ T(1)`. The equality case
-  is the standard-FCM degenerate limit.
-- `num_grid_points::NTuple{3, Int32}` — grid dimensions (M_x, M_y, M_z)
-  (paper §3, `outline.tex:175`).
-- `M_G::Integer` — cubic stencil support per axis (paper §5,
-  `outline.tex:571`). Stored as `Int32`.
-
-The grid spacing `Δx = L_i / num_grid_points[i]` is required to be
-identical across axes (paper §3 isotropy assumption).
-
-See `spec/force-spreading.md`.
-"""
-struct FFCMConfig{T <: AbstractFloat}
-    # … (existing fields from steps 1, 2) …
-    a::T
-    σ::T
-    Σ::T
-    num_grid_points::NTuple{3, Int32}
-    M_G::Int32
-    Δx::T
-    inv_Δx::T
-    force_grid::StructArray{SVector{3, T}, 3, /*…*/}
-    gauss_x::Vector{T}; gauss_y::Vector{T}; gauss_z::Vector{T}
-    r²_x::Vector{T};   r²_y::Vector{T};   r²_z::Vector{T}
-    ind_x::Vector{Int32}; ind_y::Vector{Int32}; ind_z::Vector{Int32}
-end
-
-"""
-    spread_forces!(config) -> config
-
-Step 3 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 3). Evaluate
-J̃†[F](x_g) = Σₙ Fₙ Δ̃ₙ(x_g; Σ) on every grid point x_g, writing the result
-into `config.force_grid`. Reads `config.Y_sorted` and `config.F_sorted`
-(populated by `sort_particles_by_cell!`).
-
-Allocation-free and type-stable on `T <: AbstractFloat`.
-
-See `spec/force-spreading.md`.
-"""
-function spread_forces!(config::FFCMConfig{T}) where {T} end
-```
-
-The underscore-prefixed
-`_spread_forces_kernel!(force_grid, Y_sorted, F_sorted, σ, Σ, Δx, inv_Δx,
-num_grid_points, M_G, gauss_x, gauss_y, gauss_z, r²_x, r²_y, r²_z,
-ind_x, ind_y, ind_z)` is the function-barrier kernel: it takes naked
-arrays and scalars so it is independently testable and benefits from
-Julia's standard type-stability pattern.
-
-### Separability of the Gaussian
-
-With $g(s; \Sigma) = (2\pi\Sigma^2)^{-1/2}\exp(-s^2 / 2\Sigma^2)$ the 1-D
-Gaussian, the 3-D Gaussian factors per axis:
-$$
-\Delta_n(\bm{x}_g; \Sigma)
-= g(x_{i_x} - Y_{n,1};\Sigma)\, g(y_{i_y} - Y_{n,2};\Sigma)\, g(z_{i_z} - Y_{n,3};\Sigma).
-$$
-Per particle, the three 1-D weight vectors `gauss_x[1..M_G]`,
-`gauss_y[1..M_G]`, `gauss_z[1..M_G]` are precomputed at $\mathcal{O}(M_G)$
-exponentials each; the inner $M_G^3$ stencil loop then assembles
-$\widetilde{\Delta}_n$ at each grid point with three multiplies plus a
-polynomial term, no further exponentials.
-
-The polynomial $r^2 = (x - Y_{n,1})^2 + (y - Y_{n,2})^2 + (z - Y_{n,3})^2$
-likewise sums precomputed axis-squared distances
-`r²_x[..] + r²_y[..] + r²_z[..]`.
-
-
-### Per-particle stencil — nearest-anchored
-
-For axis $i \in \{1, 2, 3\}$ and particle $n$,
-$$
-j_i = \mathrm{round}\!\bigl(Y_{n,i} \cdot \mathrm{inv}\Delta x\bigr)
-\qquad \text{(Julia: `round(Int32, ..., RoundNearestTiesToEven)`)}.
-$$
-The stencil grid coordinates on axis $i$ are
-$x_{i_x}^{(s)} = (j_i - \lfloor M_G/2\rfloor + s) \cdot \Delta x$ for
-$s = 0, \ldots, M_G - 1$. The corresponding grid index is
-$(j_i - \lfloor M_G/2\rfloor + s) \bmod M_i$, mapped to 1-based for
-Julia indexing (`mod(...) + 1`).
-
-For odd $M_G$ the stencil is symmetric around $j_i$; for even $M_G$ it
-covers $\lfloor M_G/2\rfloor$ grid points below $j_i$ and
-$\lceil M_G/2\rceil - 1$ above (cuFCM convention).
-
-### Standard FCM via degenerate limit
-
-Setting `Σ_over_σ = T(1)` collapses the modified kernel to the standard
-FCM Gaussian: $a_0 = 1$, $a_2 = 0$, $\widetilde{\Delta}_n = \Delta_n$.
-The spread is then bit-for-bit equivalent to a standard-FCM spread at
-the same grid spacing. This makes step 3 a drop-in replacement for the
-standard-FCM monopole spread when the user opts out of the fast-FCM
-correction; no separate code path is needed (compare cuFCM's
-`USE_REGULARFCM` compile-time switch in `cuFCM/src/CUFCM_FCM.cu:33-67`).
-
-## Cold-path vs hot-path
+### Cold-path vs hot-path
 
 | Phase | Allocations | Functions |
 |---|---|---|
-| Cold | OK | `FFCMConfig` constructor: validate inputs; derive `σ, Σ, Δx, inv_Δx`; allocate `force_grid` and the per-axis scratch vectors. |
-| Hot  | `@ballocated == 0` | `spread_forces!(config)` (after `wrap_positions!` → `assign_cells!` → `sort_particles_by_cell!`). |
+| Cold | OK | `FFCMConfig` constructor: validate inputs; derive `σ, Σ, h, inv_h`; allocate `force_density` and the per-axis scratch vectors. |
+| Hot  | `@ballocated == 0` | `spread_forces!(config)` (after wrap → assign → sort). |
 
 The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
 
+### Storage choice
+
+`force_density` is a `StructArray{SVector{3, T}, 3, …}` backed by three contiguous
+`Array{T, 3}` of shape $(M_x, M_y, M_z)$ — a vector field with per-grid-point
+readability, stored struct-of-arrays per component. The spread kernel
+destructures `(fx, fy, fz) = StructArrays.components(force_density)` without
+allocating and writes plain arrays; downstream consumers (steps 4–5) read
+`force_density[i_x, i_y, i_z]` as an `SVector{3, T}`.
+
 ## Performance notes
 
-- **Storage choice.** `force_grid` is a
-  `StructArray{SVector{3, T}, 3, …}` backed by three contiguous
-  `Array{T, 3}` of shape `(M_x, M_y, M_z)` — semantically a vector
-  field with per-grid-point readability, physically SoA per component.
-  The spread kernel destructures the components via
-  `(fx, fy, fz) = StructArrays.components(force_grid)` (zero allocation —
-  just unpacks the backing tuple) and writes them as plain arrays.
-  Downstream consumers (step 4 Stokes solve, step 5 interpolation) read
-  `force_grid[i_x, i_y, i_z]` as an `SVector{3, T}` directly.
-- **SIMD on the inner loop.** With SoA storage, `fx[i_x, i_y, i_z]` walks
-  stride-1 along $i_x$; the innermost stencil loop can therefore vectorise
-  cleanly when the wrapped indices are sequential (the common interior
-  case). The vectorisation is verified post-implementation by benchmark,
-  per the `/julia-numerical-computing` guidance against pre-emptive
-  `@simd`.
 - **Per-particle precompute.** Three 1-D Gaussian weight vectors, three
   axis-squared-distance vectors, and three integer index vectors,
-  $\mathcal{O}(M_G)$ each, are built before the inner $M_G^3$ stencil
-  loop. Inside the loop only multiplies, an add, and a fused polynomial
-  multiplication run — no exponentials, no divisions.
-- **Polynomial coefficients.** $a_0$ and $a_2$ are scalar, recomputed
-  per call from `σ` and `Σ`. Recomputing — rather than storing them as
-  cold-path fields — keeps the field set purely physical (`a, σ, Σ`)
-  and costs nothing.
-- **Normalisation.** The 1-D Gaussian norm
-  $1/\sqrt{2\pi\Sigma^2}$ is computed once per call and multiplied into
-  the 1-D weights; the 3-D normalisation
-  $(2\pi\Sigma^2)^{-3/2}$ falls out as the product of three 1-D weights.
-- **Scatter dependency.** The outer particle loop is `@inbounds` only —
-  no `@simd`, no threading on the MVP — because two different particles
-  can write to the same grid point. The sorted-by-cell order from step 2
-  gives spatial locality on `force_grid` writes (consecutive particles
-  spread to overlapping stencils), realising the cache benefit of
-  step 2.
-- **Buffer zeroing.** `fill!` each of `fx, fy, fz` once per call, before
-  the particle loop. This is non-allocating and amortised over $N \cdot M_G^3$
-  work.
+  $\mathcal{O}(M_G)$ each, are built before the inner $M_G^3$ loop. Inside the
+  loop only multiplies, an add, and a fused polynomial multiply run — no
+  exponentials, no divisions.
+- **Polynomial coefficients.** $a_0$ and $a_2$ are scalars recomputed per call
+  from `σ` and `Σ`, which keeps the field set purely physical. The intermediate
+  $\sigma^2 - \Sigma^2$ is the code's `σ²_minus_Σ²`.
+- **Normalisation.** The 1-D norm $\frac{1}{\sqrt{2\pi\Sigma^2}}$ is computed once
+  per call; the 3-D norm $(2\pi\Sigma^2)^{-3/2}$ is the product of three 1-D
+  weights.
+- **Inner-loop `@simd`, serial particle loop.** The innermost $k_x$ loop carries
+  `@simd`: within one particle's stencil the wrapped indices $\bmod\ M_x$ are
+  distinct, so the writes do not alias — provided $M_G \leq M_x$ (⚑ not yet
+  validated; see the precondition note in Contract). The outer particle loop is
+  `@inbounds` only: two different particles can write the same grid point, so it
+  is neither vectorised nor threaded in the MVP. The sorted-by-cell order from
+  step 2 gives spatial locality on consecutive particles' stencil writes.
+- **Buffer zeroing.** `fill!` each of `fx, fy, fz` once per call before the
+  particle loop — non-allocating, amortised over $N \cdot M_G^3$ work.
+- **Concurrency.** Under threading or on the GPU the scatter needs atomic adds or
+  thread-local accumulators; this is a concern for the future parallel backends.
 
-### Future optimisation — Fourier-space split (out of scope here)
+### Future optimisation — Fourier-space split
 
 A mathematically equivalent alternative spreads only the plain Gaussian
-$\bm{F}_n \Delta_n$ and folds the polynomial factor into the Stokes solve
-as a multiplication by $(1 + ((\Sigma^2 - \sigma^2)/2) k^2)^2$ in Fourier
-space (raised to the power 2 because spread and interpolation both carry
-the factor). This trades the per-particle $O(M_G^3)$ polynomial multiply
-for an $O(M_x M_y M_z)$ Fourier-space multiply in step 4 and exposes the
-modified-kernel parameter to step 4 rather than localising it here. Not
-implemented; documented for future evaluation.
-
-## Diffs from cuFCM
-
-Audited cuFCM files: `cuFCM/src/CUFCM_FCM.cu`
-(`cufcm_mono_dipole_distribution_bpp_shared_dynamic`, lines 16–184),
-`cuFCM/src/CUFCM_FCM.cuh:48-55`, `cuFCM/src/CUFCM_SOLVER.cu:581-599`.
-Only the active (uncommented) kernel variant is considered; the earlier
-`_tpp_register`, `_recompute`, `_selection`, and `_mono` variants in the
-header are dead code per the cuFCM convention.
-
-| Facet | cuFCM | This package | Decision |
-|---|---|---|---|
-| Grid memory layout | SoA per component: three `myCufftReal*` buffers `hx, hy, hz`, each linear `(nx·ny·nz,)`, indexed as `ind = ix + iy·nx + iz·nx·ny`. | `force_grid::StructArray{SVector{3, T}, 3, …}` of shape `(M_x, M_y, M_z)`, backed SoA by three `Array{T, 3}` per component (`fx, fy, fz`). | **Adopt** the SoA layout, wrapped in a `StructArray` for a per-grid-point `SVector{3, T}` read API. Matches cuFCM byte-for-byte for CPU↔CUDA parity, lets each component drive an independent r2c FFT plan (cuFCM's pattern), keeps the spread inner loop stride-1 along $i_x$, and provides clean grid-point reads for the Stokes solve. |
-| Stencil anchoring | `xg = my_rint(Y/dx) - ngdh + (i mod ngd)` — nearest-grid-point anchor with `ngdh = ngd/2` (integer division). | Identical: $j_i = \mathrm{round}(Y_{n,i}\cdot \mathrm{inv}\Delta x)$, stencil $j_i - \lfloor M_G/2\rfloor + s$ for $s \in 0{:}M_G-1$. | **Adopt** (revised from an earlier floor-anchored draft). Nearest-anchoring minimises truncation error for fixed $M_G$ and matches the convention behind paper Table 2 (`outline.tex:600-612`). |
-| Periodic wrap of stencil indices | `xg - nx * floor(xg / nx)` — floor-mod inside the kernel after the anchor. | `mod(j_x - M_G÷2 + s, M_x)` (Julia Euclidean mod). | **Keep** — semantically identical. |
-| Normalisation `Anorm` | `1/√(2π·Σ²)` per axis (1-D); the 3-D norm `Anorm^3` appears as a product of three per-axis weights. | Identical. | **Keep**. |
-| Polynomial coefficients | `temp2 = 0.5·pdmag/Σ²`, `temp3 = temp2/Σ²`, `temp4 = 3·temp2`, with `pdmag = σ² - Σ²` (≤ 0). Combined factor `temp1·(1 + temp3·r² - temp4)`. | $a_0 = 1 - 3\,\mathrm{pdmag}/(2\Sigma^2)$, $a_2 = \mathrm{pdmag}/(2\Sigma^4)$, $\widetilde\Delta_n = (a_0 + a_2 r^2)\Delta_n$. | **Keep** — algebraically identical. Naming follows the closed-form derivation rather than intermediate temps. |
-| Per-particle pre-compute | CUDA shared memory of size `(3·ngd·sizeof(Integer) + 9·ngd·sizeof(Real) + 15·sizeof(Real))` holding `gaussx/y/z`, `xdis/ydis/zdis`, `indx/y/z`, `grad_gauss…` (rotation), and per-particle scalars. | Pre-allocated `gauss_x/y/z`, `r²_x/y/z`, `ind_x/y/z` on `FFCMConfig`, length `M_G` each. Stores axis-squared distances (`r²_x`) rather than signed axis distances (`xdis`). | **Adopt** the precompute pattern, but store $r^2_i = x_i^2$ directly to save one multiply per inner-loop iteration (the spread polynomial only needs $r^2$). |
-| Scatter into grid | `atomicAdd(&fx[ind], …)` for each component — GPU atomics for the many-to-one write race. | Plain `fx[i_x, i_y, i_z] += …` etc. — single-threaded CPU, no race. | **Keep** for the MVP. The future CPU-threaded path will need `Threads.Atomic`, cell-partitioned scheduling, or thread-local accumulators (logged as a PLAN.md backlog entry for downstream CPU optimisation and CUDA design). |
-| Particle iteration | `for(np = blockIdx.x; ...; np += gridDim.x)`; one CUDA block per particle. Y/F indexed as `Y[3·np + k]` from the raw input arrays (cuFCM does **not** materialise sorted Y/F — the sort index `particle_index[np]` is a bounds filter, not an indirection). | Single serial loop `s = 1, …, N` over the sorted slot range; reads `Y_sorted[k, s]`, `F_sorted[k, s]` materialised by step 2. | **Keep** — step 2 has already paid the gather cost, and the cache-line wins on `force_grid` writes from consecutive sorted particles are the benefit step 2 was designed to enable. |
-| Particle selection / start-end filter | `particle_index[np] ∈ [start, end)` for sub-domain scheduling. | No filter; the full sorted range is processed. | **Out of scope** — sub-domain scheduling not part of the CPU MVP. |
-| Dipole / torque / rotation branch | `rotation == 1`: precomputes `grad_gauss…_dip`, antisymmetric `g_shared`, and an extra `tempdip` factor; spreads $\bm H \nabla \Delta$ alongside $\bm F \Delta$. | None — force-only $\mathcal{M}^{\mathcal{V}\mathcal{F}}$. | **Out of scope** per PLAN.md. |
-| `USE_REGULARFCM` compile-time mode | Alternative kernel branch with `Sigma = sigma` and a separate `sigmadip`; skips the polynomial-in-$r^2$ factor. | No flag, no separate code path. With `Σ_over_σ = 1` the polynomial collapses to $a_0 = 1$, $a_2 = 0$ and $\widetilde{\Delta} = \Delta$ naturally; the validation explicitly admits the equality case. | **Subsume via degenerate limit.** cuFCM's flag is a benchmarking convenience to skip a multiplication; algorithmically the limit is free. Test 10 pins this. |
-| Isotropic `dx` | `Real dx` scalar in the kernel signature. | Scalar `Δx::T`; validated isotropic at construction. | **Keep** — same constraint, same generality. |
-| Rounding convention | `my_rint` — C99 round-to-nearest, ties to even. | Julia `round(Int32, ..., RoundNearestTiesToEven)`. | **Keep** — byte-for-byte parity except at exact ties (which the tests do not pin). |
-
-The behavioural differences with implementation consequence are: SoA
-storage via `StructArray` (cuFCM has bare SoA; ours wraps it for a
-typed per-grid-point API), $r^2$-only precompute (slight cost saving),
-and the absent threading / rotation / start-end-filter branches (out of
-scope).
+$\boldsymbol{F}_n \Delta_n$ and folds the polynomial factor into the Stokes solve
+as a Fourier-space multiply by $\bigl(1 + \frac{\Sigma^2 - \sigma^2}{2} k^2\bigr)^2$
+(squared because spread and interpolation both carry the factor). This trades the
+per-particle $\mathcal{O}(M_G^3)$ polynomial multiply for an $\mathcal{O}(M)$
+Fourier-space multiply in step 4. Not implemented; recorded for future evaluation.
 
 ## Verification
 
-End-to-end correctness for this step is established by the test suite.
 Test files follow the flat-`test/` layout and the domain-language naming
 convention.
 
-- `test/test_spread_forces.jl` — analytical / paper-derived tests:
-  1. **Cold-path validation.** `a == T(1)` constructs; `a ≠ T(1)` raises
-     `"non-unit particle radius not yet implemented"`. `Σ_over_σ < T(1)`
-     raises `ArgumentError`. Anisotropic grid spacing raises
-     `ArgumentError`. Derived fields satisfy the closed forms
-     ($\sigma = 1/\sqrt{\pi}$, $\Sigma = (\Sigma/\sigma)\sigma$,
-     $\Delta x = L_1/M_x$). `force_grid` has shape `(M_x, M_y, M_z)` and
-     `StructArrays.components(force_grid)` is a 3-tuple of `Array{T, 3}`
-     of that shape; scratch vectors have length `M_G`.
-  2. **Closed-form single-particle stencil.** Place one particle at a
-     known position; hand-compute $\widetilde{\Delta}_n(\bm{x}_g;\Sigma)$
-     at a few stencil grid points; assert `force_grid[i_x, i_y, i_z]`
-     equals `F_n * Δ̃_n` to `sqrt(eps(T))`.
-  3. **Stencil anchoring matches cuFCM convention.** For a particle at
-     $Y = 0.3\Delta x$ with $M_G$ even, the stencil's lowest occupied
-     grid index is $\mathrm{round}(Y/\Delta x) - M_G/2$; for
-     $Y = 0.7\Delta x$ it is one index higher (after periodic wrap).
-     Direct check of the nonzero-receiving indices.
-  4. **Force conservation.** $\sum_g \widetilde{\mathcal{J}}^\dagger
-     [\mathcal{F}](\bm{x}_g)\,\Delta x^3 \approx \sum_n \bm{F}_n$ within
-     the truncation tolerance of the chosen $(M_G, \Sigma/\Delta x)$
-     (paper Table 2, `outline.tex:600-612`).
-  5. **First moment / centroid.** One unit particle:
-     $\sum_g \bm{x}_g\, \widetilde{\Delta}_n(\bm{x}_g;\Sigma)\,\Delta x^3 \approx \bm{Y}_n$
-     within the same truncation tolerance.
-  6. **Periodicity.** Particle at $\bm{Y}_n$ vs $\bm{Y}_n + L\hat{e}_i$
-     (after `wrap_positions!`) → identical `force_grid`.
-  7. **Linearity in `F`.** $\widetilde{\mathcal{J}}^\dagger[\alpha\mathcal{F}_1 + \beta\mathcal{F}_2] = \alpha\widetilde{\mathcal{J}}^\dagger[\mathcal{F}_1] + \beta\widetilde{\mathcal{J}}^\dagger[\mathcal{F}_2]$.
-  8. **Reflection symmetry.** Particle exactly on a grid point;
-     `force_grid` is reflection-symmetric about that grid point along
-     each axis, within `sqrt(eps(T))`.
-  9. **Translation by one grid step.** Particle at $\bm{Y}_n$ vs
-     $\bm{Y}_n + \Delta x\,\hat{e}_i$ → `force_grid` shifted by one cell
-     on axis $i$.
-  10. **Standard-FCM degenerate limit ($\Sigma = \sigma$).** With
-      `Σ_over_σ = T(1)`, `spread_forces!` equals the closed-form
-      standard-FCM Gaussian spread at every grid point.
-- `test/test_spread_forces_inferred.jl` — `@inferred` type stability for
-  `spread_forces!` and `_spread_forces_kernel!`, `Float32`/`Float64`.
-- `test/test_spread_forces_allocations.jl` — `@ballocated == 0` for the
-  wrapper and the kernel.
-- `test/test_jet.jl` — `JET.@test_call spread_forces!` walks the full
-  call graph for inference health.
-- `test/test_aqua.jl` — `Aqua.test_all` covers the module hygiene.
-- `test/test_cell_geometry.jl` (or `test/test_fcm_grid.jl`) pins the new
-  cold-path derived fields.
+- `test/test_spread_forces.jl` — analytical and paper-derived tests:
+  1. **Cold-path validation.** `a ≠ T(1)` is rejected; `Σ_over_σ < T(1)` is
+     rejected; anisotropic spacing is rejected. Derived fields satisfy the closed
+     forms ($\sigma = \frac{1}{\sqrt{\pi}}$, $\Sigma = \frac{\Sigma}{\sigma}\sigma$,
+     $h = \frac{L_1}{M_x}$). `force_density` has shape $(M_x, M_y, M_z)$; scratch
+     vectors have length $M_G$.
+  2. **Closed-form single-particle stencil.** One particle at a known position;
+     hand-computed $\tilde{\Delta}_n(\boldsymbol{x}_g; \Sigma)$ at stencil points
+     matches `force_density` to `sqrt(eps(T))`.
+  3. **Stencil anchoring.** For $Y = 0.3h$ (even $M_G$) the lowest occupied
+     index is $\operatorname{round}(Y/h) - M_G/2$; for $Y = 0.7h$ it is one
+     higher (after wrap).
+  4. **Force conservation.** $\sum_g \tilde{\mathcal{J}}^\dagger[\mathcal{F}](\boldsymbol{x}_g) h^3 \approx \sum_n \boldsymbol{F}_n$,
+     within the $(M_G, \Sigma/h)$ truncation tolerance (paper Table 1). This
+     holds because $\int_{\mathbb{R}^3} \tilde{\Delta}_n \, \mathrm{d}^3\boldsymbol{x} = 1$:
+     the Gaussian integrates to one and the Laplacian term integrates to zero
+     ($\int \Delta\Delta_n = 0$ by the decay of $\nabla\Delta_n$), so only the
+     $M_G^3$-stencil truncation of the Gaussian tail breaks the equality.
+  5. **First moment / centroid.** $\sum_g \boldsymbol{x}_g \tilde{\Delta}_n(\boldsymbol{x}_g; \Sigma) h^3 \approx \boldsymbol{Y}_n$,
+     same tolerance, because $\int_{\mathbb{R}^3} \boldsymbol{x} \tilde{\Delta}_n \, \mathrm{d}^3\boldsymbol{x} = \boldsymbol{Y}_n$
+     (the Gaussian has mean $\boldsymbol{Y}_n$ and $\int \boldsymbol{x}\Delta\Delta_n = 0$).
+  6. **Periodicity.** $\boldsymbol{Y}_n$ versus $\boldsymbol{Y}_n + L\hat{e}_i$ →
+     identical `force_density`.
+  7. **Linearity in `F`.** $\tilde{\mathcal{J}}^\dagger[\alpha\mathcal{F}_1 + \beta\mathcal{F}_2] = \alpha\tilde{\mathcal{J}}^\dagger[\mathcal{F}_1] + \beta\tilde{\mathcal{J}}^\dagger[\mathcal{F}_2]$.
+  8. **Reflection symmetry.** Particle on a grid point → `force_density` is
+     reflection-symmetric about it per axis, within `sqrt(eps(T))`, because the
+     Gaussian is even in $\boldsymbol{x} - \boldsymbol{Y}_n$.
+  9. **Translation by one grid step.** $\boldsymbol{Y}_n + h\hat{e}_i$ →
+     `force_density` shifted by one cell on axis $i$.
+  10. **Standard FCM at $\Sigma = \sigma$.** Equals the closed-form standard-FCM
+      Gaussian spread at every grid point.
+- `test/test_spread_forces_inferred.jl` — `@inferred` for `spread_forces!` and the
+  kernels, `Float32`/`Float64`.
+- `test/test_spread_forces_allocations.jl` — `@ballocated == 0` for the wrapper
+  and the kernels.
+- `test/test_jet.jl` — `JET.@test_call spread_forces!` over the full call graph.
+- `test/test_aqua.jl` — `Aqua.test_all` package hygiene.
+- `test/test_fcm_grid.jl` — pins the cold-path derived fields.
 
-Tolerances: the closed-form single-particle stencil, periodicity,
-linearity, reflection, translation, and degenerate-limit tests use
-`sqrt(eps(T))`. The truncation-tolerant tests (force conservation, first
-moment) use the paper-tabulated error for the chosen $(M_G, \Sigma/\Delta x)$,
-explicitly documented in the test body.
+Tolerances: tests 1–3 and 6–10 use `sqrt(eps(T))`; the truncation-dominated tests
+4–5 use the paper-tabulated error for the chosen $(M_G, \Sigma/h)$, documented in
+the test body.
+
+## Differences from cuFCM
+
+> Comparison against the C++/CUDA reference implementation, kept for validation
+> during development and removed once the port is complete.
+
+Audited: `cuFCM/src/CUFCM_FCM.cu`
+(`cufcm_mono_dipole_distribution_bpp_shared_dynamic`), `CUFCM_FCM.cuh`,
+`CUFCM_SOLVER.cu`. Only the active (uncommented) kernel variant is considered; the
+`_tpp_register`, `_recompute`, `_selection`, `_mono` variants are dead code per
+the cuFCM convention.
+
+| Facet | cuFCM | This package | Decision |
+|---|---|---|---|
+| Grid memory layout | SoA per component: three linear `myCufftReal*` buffers `hx, hy, hz`, `ind = ix + iy·nx + iz·nx·ny`. | `force_density::StructArray{SVector{3, T}, 3}` over three `Array{T, 3}`. | **Adopt** SoA, wrapped for a per-grid-point `SVector{3, T}` API; byte-compatible with cuFCM for parity, stride-1 along $i_x$. |
+| Stencil anchoring | `xg = my_rint(Y/dx) − ngdh + (i mod ngd)`, `ngdh = ngd/2`. | Identical: $j_i = \operatorname{round}(Y_{n,i}/h)$, stencil $j_i - \lfloor M_G/2\rfloor + s$. | **Adopt** — nearest-anchoring minimises truncation for fixed $M_G$. |
+| Periodic wrap | `xg − nx·floor(xg/nx)`. | `mod(j_x − ⌊M_G/2⌋ + s, M_x)`. | **Keep** — semantically identical. |
+| Normalisation | `Anorm = 1/√(2π·Σ²)` per axis; 3-D as `Anorm³`. | Identical (`inv_norm`). | **Keep**. |
+| Polynomial coefficients | `temp2 = ½·pdmag/Σ²`, `temp3 = temp2/Σ²`, `temp4 = 3·temp2`, `pdmag = σ²−Σ²`; factor `(1 + temp3·r² − temp4)`. | $a_0 = 1 − \frac{3(\sigma^2-\Sigma^2)}{2\Sigma^2}$, $a_2 = \frac{\sigma^2-\Sigma^2}{2\Sigma^4}$. | **Keep** — algebraically identical; named after the closed form. |
+| Per-particle precompute | shared-mem `gaussx/y/z`, `xdis/ydis/zdis`, `indx/y/z`, grad-Gaussian (rotation), scalars. | `gaussian_*`, `r²_*`, `idx_*`, length $M_G$. Stores $r^2_i = x_i^2$ rather than signed `xdis`. | **Adopt** the pattern; store $r^2$ directly (one fewer multiply per inner iteration). |
+| Scatter into grid | `atomicAdd(&fx[ind], …)` for the many-to-one race. | Plain `fx[i_x, i_y, i_z] += …` (single-threaded CPU). | **Keep** for the MVP; threading needs atomics or thread-local accumulators. |
+| Particle iteration | one CUDA block per particle; `Y[3·np + k]` from raw arrays (the sort index is a filter, not an indirection). | serial loop over sorted slots; reads materialised `Y_sorted`/`F_sorted`. | **Keep** — step 2 paid the gather; consecutive sorted particles give cache locality. |
+| Dipole / torque / rotation | `rotation == 1` branch spreads $\boldsymbol{H}\nabla\Delta$. | none — force-only $\mathcal{M}^{\mathcal{V}\mathcal{F}}$. | **Out of scope** for the force-only operator. |
+| `USE_REGULARFCM` mode | compile-time branch with $\Sigma = \sigma$, skips the polynomial. | no flag; $\frac{\Sigma}{\sigma} = 1$ collapses the polynomial naturally. | **Subsume via the $\Sigma = \sigma$ limit** (test 10). |
+| Isotropic `dx` | scalar `Real dx`. | scalar `h`; validated isotropic at construction. | **Keep**. |
+| Rounding | `my_rint` (ties to even). | `round(…, RoundNearestTiesToEven)`. | **Keep** — parity except at exact ties (tests do not pin which). |
+
+The behavioural differences with implementation consequence are the SoA storage
+via `StructArray`, the $r^2$-only precompute, and the absent threading and
+rotation branches.

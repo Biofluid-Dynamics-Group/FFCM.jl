@@ -8,184 +8,148 @@ The fluid velocity $\boldsymbol{u}$ is set to match a no-slip condition on the p
 is realised by setting the particle velocities to be interpolations of the fluid velocity.
 This operator,
 $$\begin{align*}
-    \tilde{\mathcal{J}} : \boldsymbol{L}^{2}\left(\Omega\right) &\to \left[\R^3\right]^N \\
-    \boldsymbol{u} &\mapsto \int_{\Omega} \boldsymbol{u}\left(\boldsymbol{x}\right) \tilde{\Delta}_n\left(\boldsymbol{x}; \Sigma\right) \, \mathrm{d}\boldsymbol{x} \quad \text{(§3, equation(26))} \text{,}
+    \tilde{\mathcal{J}} : \boldsymbol{L}^{2}\left(\Omega\right) &\to \left[\mathbb{R}^3\right]^N \\
+    \boldsymbol{u} &\mapsto \int_{\Omega} \boldsymbol{u}\left(\boldsymbol{x}\right) \tilde{\Delta}_n\left(\boldsymbol{x}; \Sigma\right) \, \mathrm{d}\boldsymbol{x} \quad \text{(§3, equation (26))} \text{,}
 \end{align*}$$
-is the adjoint of the spreading operator $\mathcal{J}^\dagger$ because the spreading and interpolation
+is the adjoint of the spreading operator $\tilde{\mathcal{J}}^\dagger$ because the spreading and interpolation
 kernels are the same modified Gaussian kernel.
 
 The resulting vector $\tilde{\mathcal{J}}\left[\boldsymbol{u}\right] = \left(\boldsymbol{V}_n\right)_{n = 1}^N$ corresponds to the particle velocities and closes the definition of the mobility operator.
 
 Since we have a sampling of $\boldsymbol{u}$ on the gridpoints, the integral is approximated
-by the trapezoidal rule on those points using the $M_G \times M_G \times M_G$ stencil. (REFACTOR NOTE: There should be a formal proof that this is required for the positive-definiteness, and a descriptive comment on why
-it is spectrally accurate. Saying "Euler-Maclaurin" doesn't mean anything if you don't know that that is.)
+by the trapezoidal rule on those points using the $M_G \times M_G \times M_G$ stencil.
 
 In the code, we define
-- `V` $= \left(\boldsymbol{V}_1, \dots, \boldsymbol{V}_n\right)$
+- `V` $= \left(\boldsymbol{V}_1, \dots, \boldsymbol{V}_N\right)$.
 
-## Why the quadrature is the trapezoidal rule, not Gauss quadrature
+## Method
 
-The paper specifies the trapezoidal rule (`outline.tex:185`). Three reasons
-no higher-order quadrature (e.g. Gauss–Hermite) applies:
+### Interpolation as a quadrature
 
-1. **The flow is only on the grid.** $\bm u$ is known on the uniform FFT
-   grid alone. Gauss nodes fall between grid points and would require
-   interpolating $\bm u$ first — extra error and cost for an
-   already-discretised field.
-2. **Trapezoidal is already spectral here.** On a periodic grid the
-   trapezoidal rule is spectrally accurate for this smooth integrand
-   (Euler–Maclaurin: periodicity cancels every boundary term).
-3. **Adjointness / positive-definiteness.** The full mobility
-   $\mathcal{M}^{\mathcal{V}\mathcal{F}} = \mathcal{J}\,\mathcal{L}^{-1}\,
-   \mathcal{J}^\dagger$ is symmetric positive-definite *only because*
-   interpolation is the exact discrete adjoint (transpose) of spreading
-   (paper `outline.tex:324`). The trapezoidal rule with the uniform weight
-   $\Delta x^3$ makes $\widetilde{\mathcal{J}} = \Delta x^3\,
-   \widetilde{\mathcal{J}}^{\dagger\top}$ exactly; any other quadrature
-   breaks the transpose and the SPD guarantee the downstream iterative
-   resistance solver depends on.
-
-Interpolation therefore reuses the spread's exact per-particle stencil
-weights — a gather instead of a scatter, times $\Delta x^3$.
-
-## Adjointness
-
-Let $S$ be the spread matrix ($S_{g,n} = \widetilde{\Delta}_n(\bm x_g; \Sigma)$,
-the action of `spread_forces!`) and $P$ the step-2 gather permutation
-($F_\text{sorted} = P F$, `_gather_particles_kernel!`). Then
-
+The velocity of particle $n$ is the modified-kernel volume average
+$\boldsymbol{V}_n = \int_\Omega \boldsymbol{u}(\boldsymbol{x})\tilde{\Delta}_n(\boldsymbol{x}; \Sigma)\, \mathrm{d}\boldsymbol{x}$.
+With $\boldsymbol{u}$ known only at the grid points, the integral is approximated by the
+trapezoidal rule with the uniform weight $h^3$ over the same $M_G^3$ stencil as the spread,
 $$
-\bm V = P^\top\, \Delta x^3\, S^\top\, \mathcal{L}^{-1}\, S\, P\, \bm F ,
-\qquad
-\mathcal{M}^{\mathcal{V}\mathcal{F}}
-= \Delta x^3\, (S P)^\top\, \mathcal{L}^{-1}\, (S P),
+\boldsymbol{V}_n = h^3 \sum_{\text{stencil}} \boldsymbol{u}(\boldsymbol{x}_g)
+\bigl(a_0 + a_2 r_n^2\bigr) g_x g_y g_z ,
 $$
+where the modified kernel $\tilde{\Delta}_n = (a_0 + a_2 r_n^2)\Delta_n$, its separable
+1-D weights $g_x g_y g_z$, the axis-squared distances $r_n^2$, and the nearest-anchored
+stencil are exactly as derived in [force-spreading.md](force-spreading.md). The only
+differences from the spread are the direction — a gather from the grid rather than a
+scatter to it — and the quadrature factor $h^3$, applied once per particle.
 
-symmetric positive-definite because $\mathcal{L}^{-1}$ is. The scatter-back
-`V[:, original_index[s]] = V_n` realises $P^\top$ — the transpose of the
-step-2 gather. The interpolation weight at each stencil grid point is
-identical to the spread weight; only the quadrature factor $\Delta x^3$ and
-the gather-vs-scatter direction differ.
+### Why the trapezoidal rule, with the uniform weight $h^3$
 
-## Notation (paper-consistent)
+Two independent reasons fix both the rule and its weight; neither is a free quadrature
+choice.
 
-In addition to the symbols pinned by [force-spreading.md](force-spreading.md)
-and [stokes-solve.md](stokes-solve.md):
+**1. Exact discrete adjointness makes the mobility symmetric.**
+Let $S$ be the spread matrix, with entry $S_{g,n} = \tilde{\Delta}_n(\boldsymbol{x}_g; \Sigma)$
+the weight particle $n$ contributes to grid point $g$ — so `spread_forces!` computes the
+grid field $\sum_n S_{g,n}\boldsymbol{F}_n$. The trapezoidal interpolation above is
+$\boldsymbol{V}_n = h^3 \sum_g S_{g,n}\boldsymbol{u}(\boldsymbol{x}_g)$, i.e. the matrix
+$h^3 S^T$ acting on the grid velocity. Writing $P$ for the step-2 gather permutation
+($\boldsymbol{F}_{\text{sorted}} = P\boldsymbol{F}$, undone on output by the scatter-back
+$P^T$) and $\mathcal{L}^{-1}$ for the Stokes solve, the assembled smooth mobility is
+$$
+\tilde{\mathcal{M}}^{\mathcal{V}\mathcal{F}} = h^3 (SP)^T \mathcal{L}^{-1} (SP).
+$$
+$\mathcal{L}^{-1}$ is symmetric: per Fourier mode it is the orthogonal projector
+$\boldsymbol{I} - \hat{\boldsymbol{k}}\hat{\boldsymbol{k}}^T$ (symmetric, idempotent,
+eigenvalues $0, 1, 1$) scaled by the positive factor $1/(\mu k^2)$, so it is symmetric and
+positive-semidefinite. Therefore $\tilde{\mathcal{M}}^{\mathcal{V}\mathcal{F}}$ is symmetric
+and positive-semidefinite for **any** $S$, and positive-definite on the force space for
+physical (distinct-particle) configurations. This holds **only** because interpolation is
+the exact transpose of spreading: the uniform weight $h^3$ at every stencil point is what
+makes $\tilde{\mathcal{J}} = h^3 S^T$ exactly. A non-uniform weight would replace $h^3$
+by a diagonal $W \neq h^3 \boldsymbol{I}$, and Gauss-type nodes would change the node set
+entirely; either breaks $\tilde{\mathcal{J}} = h^3 S^T$, the transpose relation, and the
+symmetry of the mobility. The downstream iterative resistance solver depends on that
+symmetry (conjugate gradients assumes a symmetric positive-definite operator), so the
+uniform-weight trapezoidal rule is a structural requirement, not an accuracy preference.
 
-- `i ∈ {x, y, z}` (equivalently `{1, 2, 3}`) — Cartesian axis index.
-- `n ∈ {1, …, N}` — particle index. `Y[i, n]`, `V[i, n]` map to paper
-  $\bm Y_n$, $\widetilde{\bm V}_n$ (the `n`-th column).
-- `Δ̃_n(x; Σ)` — the modified kernel, identical to the spread kernel
-  (paper eq 267).
-- `Δx³` — the trapezoidal-rule volume element on the uniform grid.
+**2. Spectral accuracy on the periodic grid (Euler–Maclaurin).**
+On a periodic domain the trapezoidal rule is far more accurate than its nominal
+second order: for a smooth integrand it converges faster than any power of $h$. The
+mechanism is the Euler–Maclaurin formula, which for a function $\phi$ on $[0, L]$ sampled
+at the grid points $x_j = j h$ relates the trapezoidal sum to the exact integral by
+$$
+h \sum_{j} \phi(x_j) - \int_0^L \phi(x) \, \mathrm{d}x
+= \sum_{m \geq 1} \frac{B_{2m}}{(2m)!} h^{2m}
+\left[\phi^{(2m-1)}(L) - \phi^{(2m-1)}(0)\right],
+$$
+with $B_{2m}$ the Bernoulli numbers. The error is a sum of **boundary** terms involving odd
+derivatives at the two endpoints. For an $L$-periodic integrand every derivative matches at
+the endpoints, $\phi^{(k)}(L) = \phi^{(k)}(0)$, so every term in the series cancels and the
+error decays faster than any fixed power of $h$ — "spectral", or super-algebraic,
+convergence. The integrand here is $\boldsymbol{u}(\boldsymbol{x})\tilde{\Delta}_n(\boldsymbol{x}; \Sigma)$,
+a product of two $C^\infty$, $L$-periodic functions (the discrete velocity field is a
+trigonometric polynomial; the Gaussian kernel, summed over its periodic images, is smooth
+and $L$-periodic), so the full-grid trapezoidal sum integrates it to spectral accuracy.
+Restricting the sum to the $M_G^3$ stencil drops only the Gaussian tail outside the
+stencil, which is exponentially small in $M_G$. Both error sources are therefore
+negligible at modest $M_G$.
 
 ## Contract
 
-### Cold-path input
+### Cold-path input and derived state
 
-No new cold-path inputs. Interpolation reuses the grid, kernel, and scratch
-state built for steps 3 and 4.
-
-### Cold-path derived state
-
-No new `FFCMConfig` fields. Interpolation runs after spread + Stokes solve,
-so the per-axis scratch vectors `gauss_x/y/z`, `r²_x/y/z`, `ind_x/y/z` (built
-for step 3) are free to reuse.
+None new. Interpolation reuses the grid, kernel widths, and per-axis scratch vectors built
+for steps 3 and 4. It runs strictly after the spread and the Stokes solve, so reusing the
+scratch is safe.
 
 ### Hot-path input (per `interpolate_velocities!` call)
 
-- `config.velocity_grid` — populated by `stokes_solve!` (step 4); the fluid
-  velocity field $\bm u(\bm x_g)$ at every grid point.
-- `config.Y_sorted` — sorted particle positions (step 2). Folded into
-  $[0, L_i)$ by `wrap_positions!`.
-- `config.original_index` — sorted slot `s` → original particle index `n`
-  (step 2), used to scatter results back to caller order.
+- `config.fluid_velocity` — the fluid velocity field $\boldsymbol{u}(\boldsymbol{x}_g)$ from
+  `stokes_solve!`.
+- `config.Y_sorted` — sorted particle positions (step 2), folded into $[0, L_i)$.
+- `config.original_index` — sorted slot to original particle index (step 2), for the
+  scatter-back to the caller's order.
 
 ### Hot-path output
 
-- `V::AbstractMatrix{T}` of shape `(3, N)`, **caller-owned, original particle
-  order**. On return, `V[:, n]` holds $\widetilde{\bm V}_n$ for particle `n`
-  in the caller's indexing. The terminal step produces the user-facing
-  result, so it writes the output buffer directly rather than a `config`
-  field — and `(3, N)` is the shape the matrix-free `mul!` pipeline needs.
+- `V` (`AbstractMatrix{T}`, shape `(3, N)`), **caller-owned, original particle order**. On
+  return `V[:, n]` holds $\boldsymbol{V}_n$ in the caller's indexing. This terminal grid
+  step produces the user-facing result, so it writes the output buffer directly rather than
+  a `config` field, and `(3, N)` is the shape the matrix-free `mul!` pipeline needs.
 
 ### Side effects
 
-- The scratch vectors `gauss_*`, `r²_*`, `ind_*` are overwritten with the
-  last particle's per-axis precomputed values; they carry no between-call
-  invariant (shared with step 3).
-- `config.velocity_grid` is **not** modified (read-only consumer).
+- The per-axis scratch vectors are overwritten with the last particle's values; they carry
+  no between-call invariant (shared with step 3).
+- `config.fluid_velocity` is **not** modified.
 
 ### Periodicity contract
 
-Identical to spread: positions enter folded into $[0, L_i)$; the per-particle
-stencil is wrapped mod $M_i$ inside the kernel; a particle near the domain
-edge gathers from a stencil that wraps to the opposite side.
+Identical to the spread: positions enter folded into $[0, L_i)$; each particle's stencil is
+wrapped $\bmod\ M_i$; a particle near the edge gathers from a stencil that wraps to the
+opposite side.
 
 ### Boundary cases
 
-- **Particle exactly on a grid point** — distance 0 along each axis; no
-  special case (same as spread).
-- **`Σ = σ` degenerate limit** — $a_0 = 1$, $a_2 = 0$, so
-  $\widetilde{\Delta}_n = \Delta_n$ and interpolation is the plain-Gaussian
-  FCM volume average.
+- **Particle exactly on a grid point** — distance 0 along each axis; no special case.
+- **$\Sigma = \sigma$** — $a_0 = 1$, $a_2 = 0$, so $\tilde{\Delta}_n = \Delta_n$ and
+  interpolation is the plain-Gaussian FCM volume average.
 
-## API
+## Implementation
 
-```julia
-"""
-    interpolate_velocities!(V, config) -> V
+`interpolate_velocities!(V, config)` is the hot-path entry. It reads `config.fluid_velocity`,
+`config.Y_sorted`, and `config.original_index`, and writes the particle velocities into `V`
+in the caller's original order, returning `V`. It is allocation-free and type-stable.
 
-Step 5 of the Fast FCM algorithm (Su & Keaveny 2024, §4 Step 5). Interpolate
-the fluid velocity field `config.velocity_grid` (output of `stokes_solve!`)
-to each particle position, writing the particle velocities into `V` (a `3×N`
-matrix in the caller's original particle order). Reads `config.Y_sorted` and
-`config.original_index` (populated by `sort_particles_by_cell!`).
+It delegates to the function-barrier kernel `_interpolate_velocities_kernel!`, which takes
+naked arrays and scalars. Per sorted particle the kernel fills the stencil scratch (via the
+shared `_fill_particle_stencil!`, identical to the spread), accumulates the gather
+$\sum_{\text{stencil}} \boldsymbol{u}(\boldsymbol{x}_g)(a_0 + a_2 r_n^2)g_x g_y g_z$ into
+scalar accumulators, scales by $h^3$ once, and writes the result to `V[:, original_index[s]]`.
+That scatter-back through `original_index` is the inverse of the step-2 gather — the
+$P^T$ of Method — so the output lands in the caller's order with no extra buffer or pass.
 
-Per particle the modified-kernel volume average
-`Ṽ_n = ∫ u(x) Δ̃_n(x; Σ) d³x` (paper eq 283) is evaluated by the trapezoidal
-rule over the same `M_G³` stencil as the spread, with weight `Δx³`. The
-result is the exact discrete adjoint of `spread_forces!`, which makes the
-assembled mobility operator symmetric positive-definite.
-
-Allocation-free and type-stable on `T <: AbstractFloat`.
-
-See `spec/interpolation.md`.
-"""
-function interpolate_velocities!(V::AbstractMatrix{T}, config::FFCMConfig{T}) where {T} end
-```
-
-The underscore-prefixed
-`_interpolate_velocities_kernel!(V, velocity_grid, Y_sorted, original_index,
-σ, Σ, Δx, inv_Δx, num_grid_points, M_G, gauss_x, gauss_y, gauss_z, r²_x, r²_y,
-r²_z, ind_x, ind_y, ind_z)` is the function-barrier kernel: it takes naked
-arrays and scalars so it is independently testable and benefits from Julia's
-standard type-stability pattern. Mirrors the
-`spread_forces!` / `_spread_forces_kernel!` split.
-
-## Modified kernel — closed form
-
-Identical to spread (paper eq 267, derived in
-[force-spreading.md](force-spreading.md)): with $r = |\bm x - \bm Y_n|$ and
-$\mathrm{pdmag} = \sigma^2 - \Sigma^2 \le 0$,
-$$
-\widetilde{\Delta}_n(\bm x; \Sigma) = (a_0 + a_2 r^2)\, \Delta_n(\bm x; \Sigma),
-\qquad a_0 = 1 - \frac{3\,\mathrm{pdmag}}{2\Sigma^2},
-\qquad a_2 = \frac{\mathrm{pdmag}}{2\Sigma^4}.
-$$
-The separable 1-D Gaussian weights, axis-squared distances, and
-periodic-wrapped 1-based stencil indices are computed exactly as in spread
-(nearest-anchored stencil $j_i = \mathrm{round}(Y_{n,i}\cdot\mathrm{inv}\Delta x)$,
-`RoundNearestTiesToEven`).
-
-The per-grid-point gather is
-$$
-\widetilde{\bm V}_n = \Delta x^3 \sum_{\text{stencil}} \bm u(\bm x_g)\,
-(a_0 + a_2 r^2)\, g_x g_y g_z ,
-$$
-with the $\Delta x^3$ applied once per particle to the accumulated sum.
-
-## Cold-path vs hot-path
+Because `_fill_particle_stencil!` is shared verbatim with `_spread_forces_kernel!`, the
+interpolation weights are bit-for-bit the spread weights, which is what makes
+$\tilde{\mathcal{J}} = h^3 S^T$ hold exactly. The stencil index buffers are `idx_x/y/z`.
 
 | Phase | Allocations | Functions |
 |---|---|---|
@@ -196,117 +160,92 @@ The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
 
 ## Performance notes
 
-- **SoA stride-1 reads.** Destructure `(ux, uy, uz) = components(velocity_grid)`
-  so the inner stencil loop reads `ux[ix, iy, iz]` stride-1 along $i_x$,
-  mirroring the spread write loop.
-- **Scalar accumulation.** Accumulate `vx, vy, vz` as scalars over the
-  stencil; write the `SVector{3, T}` to `V[:, n]` once per particle, scaled
-  by $\Delta x^3$.
-- **`Δx³` applied once per particle**, not folded per grid point — 3 multiplies
-  per particle versus 3 per stencil grid point. Algebraically identical;
-  keeps the discrete-adjoint test bit-exact against the spread weights.
-- **Scratch reuse.** The `gauss_*`, `r²_*`, `ind_*` vectors built for spread
-  are reused; interpolation runs strictly after spread + solve, so there is
-  no overlap.
-- **No write race.** Unlike the spread scatter, the interpolation gather only
-  reads the grid; the per-particle output columns are distinct (a
-  permutation), so the loop is a clean future threading / SIMD target —
-  deferred to a benchmark per `/julia-numerical-computing` (logged under
-  PLAN.md CPU optimisation).
-
-## Diffs from cuFCM
-
-Audited `cuFCM/src/CUFCM_FCM.cu`
-(`cufcm_particle_velocities_bpp_shared_dynamic`, lines 249–423) and
-`cuFCM/src/CUFCM_SOLVER.cu` (`FCM_solver::gather`, lines 644–663). Only the
-active (force-only, non-`USE_REGULARFCM`, `rotation == 0`) path is considered;
-the commented `_tpp_register`, `_recompute`, `_selection`, `_mono` variants
-are dead code per the cuFCM convention.
-
-**cuFCM respects the adjoint.** Its spread kernel weight is
-`g_x·g_y·g_z·(1 + temp3·r² − temp4)` with **no** `Δx³`
-(`CUFCM_FCM.cu:39-47`); its interpolate weight is the *identical* term times
-`norm = dx*dx*dx` (`CUFCM_FCM.cu:258,379-384`). So cuFCM implements
-$\widetilde{\mathcal{J}} = \Delta x^3\,\widetilde{\mathcal{J}}^{\dagger\top}$
-exactly — independent confirmation of the SPD constraint.
-
-| Facet | cuFCM | This package | Decision |
-|---|---|---|---|
-| Quadrature weight | `norm = dx³` folded into the per-grid-point `temp1` | `Δx³` applied once per particle to the accumulated `(vx, vy, vz)` | **Keep** (diverge on location). Algebraically identical; cheaper and keeps the adjoint test bit-exact. |
-| Stencil precompute | `xg = my_rint(Y/dx) − ngdh + (i mod ngd)`, `Anorm`, gauss, wrap — byte-identical to its spread kernel | identical; shared with spread via `_fill_particle_stencil!` | **Adopt** — reinforces the shared-helper extraction. |
-| Polynomial factor | `1 + temp3·r² − temp4`, `temp3 = ½·pdmag/Σ⁴`, `temp4 = 3·½·pdmag/Σ²` | `(a₀ + a₂r²)`, `a₀ = 1 − 3·pdmag/2Σ²`, `a₂ = pdmag/2Σ⁴` | **Keep** — algebraically identical (same as spread). |
-| r² handling | stores signed `xdis/ydis/zdis`, recomputes `r²` in the inner loop | stores `r²_*` directly | **Keep** the r²-only precompute (same divergence as spread). |
-| Velocity-grid read | three SoA arrays `ux, uy, uz` (= `hx, hy, hz` reused), `ind = i + j·nx + k·nx·ny` | `components(velocity_grid)` → `ux, uy, uz`, column-major `(ix, iy, iz)` | **Adopt** — same SoA layout, `StructArray` wrapper. |
-| Stencil reduction | `cub::BlockReduce.Sum` over threads (one block / particle, threads over `M_G³`) | serial scalar accumulation `vx += …` | **Keep** serial for the CPU MVP; block-reduce is the GPU pattern (revisit for CUDA). |
-| Output / unsort | writes `VTEMP[3·np]` in **sorted** order; unsort handled by cuFCM's sort layer | writes `V[:, original_index[s]]` directly (inverse permutation folded in) | **Diverge.** Consistent with our step-2 decision to materialise sorted arrays; avoids an extra `V_sorted` buffer + pass. The fold is exactly $P^\top$, preserving adjointness. |
-| start/end particle filter | `particle_index[np] ∈ [start, end)` sub-domain scheduling | none; full sorted range | **Out of scope** (same as spread). |
-| Rotation/dipole (`W`) | `rotation == 1`: angular velocity $\tfrac12\nabla\times\bm u$ weighted by grad-Gaussian → `WTEMP` | none — force-only $\mathcal{M}^{\mathcal{V}\mathcal{F}}$ | **Out of scope** (PLAN.md). |
-| `USE_REGULARFCM` | compile-time `Σ = σ` branch with separate `sigmadip` | no flag; `Σ_over_σ = 1` degenerate limit subsumes it | **Subsume via degenerate limit** (same as spread). |
-| Rounding / wrap | `my_rint` (ties-even); `xg − n·floor(xg/n)` | `round(…, RoundNearestTiesToEven)`; `mod(g, M) + 1` | **Keep** — semantically identical (same as spread). |
-
-**GPU-revisit note** (future CUDA backend): interpolate is the gather mirror
-of spread's scatter — one block per particle, threads over the `M_G³` stencil,
-`cub::BlockReduce` to sum. Unlike spread's `atomicAdd`, the gather has no write
-race. Logged alongside the spread/CUDA concurrency note in `PLAN.md`.
+- **Stride-1 reads.** Destructuring `(ux, uy, uz) = components(fluid_velocity)` lets the
+  inner stencil loop read `ux[i_x, i_y, i_z]` stride-1 along $i_x$, mirroring the spread
+  write loop.
+- **Scalar accumulation.** The stencil sum accumulates into scalars `vx, vy, vz`; the
+  `SVector{3, T}` is written to `V[:, n]` once per particle, scaled by $h^3$.
+- **$h^3$ once per particle**, not folded per grid point — three multiplies per particle
+  versus three per stencil point. Algebraically identical, and it keeps the discrete-adjoint
+  test bit-exact against the spread weights.
+- **Scratch reuse.** The `gaussian_*`, `r²_*`, `idx_*` vectors built for the spread are reused;
+  interpolation runs strictly after spread + solve, so there is no overlap.
+- **No write race.** The gather only reads the grid, and the per-particle output columns are
+  distinct (a permutation), so this loop is a clean future threading / SIMD target — deferred
+  to a benchmark.
 
 ## Verification
 
-Test files follow the flat-`test/` layout and the domain-language naming
-convention.
-
-**Tolerance convention.** Relative comparisons to a non-zero reference use
-`rtol = sqrt(eps(T))`; quantities that should be `≈ 0` or arrays mixing large
-and near-zero entries use `atol = 1e-10` (`Float64`) / `1e-6` (`Float32`)
-(≈ `rtol/100`); truncation-dominated tests (constant-flow, single-sphere drag)
-use the documented `(M_G, Σ/Δx)` / finite-box tolerance stated inline.
+Relative comparisons to a non-zero reference use `rtol = sqrt(eps(T))`; quantities that
+should be $\approx 0$ use `atol = 1e-10` (`Float64`) / `1e-6` (`Float32`);
+truncation-dominated tests (constant-flow, single-sphere drag) use the documented
+$(M_G, \Sigma/h)$ / finite-box tolerance stated inline.
 
 `test/test_interpolate_velocities.jl`:
 
-1. **Output shape and scatter-back order.** `V` is `(3, N)`; with particles
-   supplied in scrambled order, `V` comes out in original (caller) order —
-   verified against the `original_index` permutation.
-2. **Discrete adjoint of spreading.** `⟨interpolate(u), eₙ⟩ = Δx³·⟨u, spread(eₙ)⟩`
-   for a chosen grid field `u` and each particle `n`. Pins
-   $\widetilde{\mathcal{J}} = \Delta x^3\, S^\top$.
-3. **Mobility symmetry.** `Fₐᵀ M Fᵦ = Fᵦᵀ M Fₐ` for random `Fₐ, Fᵦ` through the
-   full spread → solve → interpolate pipeline. Pins the SPD precondition
-   (`outline.tex:324`).
-4. **Single-particle closed form.** One particle at a known position; set
-   `velocity_grid` to a known analytic field; hand-compute
-   `V_n = Σ_stencil u(x_g)·Δ̃_n(x_g)·Δx³`.
-5. **Constant flow → constant velocity.** Uniform `velocity_grid = U` ⇒
-   `V_n ≈ U` for every particle (the kernel integrates to 1), within the
-   `(M_G, Σ/Δx)` truncation tolerance (paper Table 2).
+1. **Output shape and scatter-back order.** `V` is `(3, N)`; with particles supplied in
+   scrambled order, `V` comes out in the original (caller) order — checked against the
+   `original_index` permutation.
+2. **Discrete adjoint of spreading.** $\langle \tilde{\mathcal{J}}(\boldsymbol{u}), \boldsymbol{e}_n\rangle = h^3\langle \boldsymbol{u}, \tilde{\mathcal{J}}^\dagger(\boldsymbol{e}_n)\rangle$
+   for a chosen grid field $\boldsymbol{u}$ and each particle $n$ — pins
+   $\tilde{\mathcal{J}} = h^3 S^T$.
+3. **Mobility symmetry.** $\boldsymbol{F}_a^T \mathcal{M} \boldsymbol{F}_b = \boldsymbol{F}_b^T \mathcal{M} \boldsymbol{F}_a$
+   for random $\boldsymbol{F}_a, \boldsymbol{F}_b$ through the full spread → solve →
+   interpolate pipeline — pins the symmetry that the SPD precondition rests on.
+4. **Single-particle closed form.** One particle at a known position; set `fluid_velocity`
+   to a known analytic field; hand-compute $\boldsymbol{V}_n = h^3 \sum_{\text{stencil}} \boldsymbol{u}(\boldsymbol{x}_g)\tilde{\Delta}_n(\boldsymbol{x}_g)$.
+5. **Constant flow → constant velocity.** Uniform `fluid_velocity` $= \boldsymbol{U}$ gives
+   $\boldsymbol{V}_n \approx \boldsymbol{U}$ for every particle, within the
+   $(M_G, \Sigma/h)$ truncation tolerance. This holds because the kernel integrates to one,
+   $\int_{\mathbb{R}^3} \tilde{\Delta}_n = 1$ (derived in force-spreading.md), so a constant
+   field is reproduced exactly up to the stencil truncation.
 6. **Linearity in the flow field.**
-   `interpolate(α u₁ + β u₂) = α·interpolate(u₁) + β·interpolate(u₂)`.
-7. **Periodicity.** Particle at `Yₙ` vs `Yₙ + L êᵢ` (after `wrap_positions!`)
-   on the same `velocity_grid` ⇒ identical `V_n`.
-8. **Standard-FCM degenerate limit (Σ = σ).** `Σ_over_σ = 1` ⇒ interpolation
-   uses the plain Gaussian (`a₀ = 1, a₂ = 0`), matching the closed-form FCM
-   volume average.
+7. **Periodicity.** Particle at $\boldsymbol{Y}_n$ versus $\boldsymbol{Y}_n + L\hat{e}_i$ on
+   the same `fluid_velocity` gives identical $\boldsymbol{V}_n$.
+8. **$\Sigma = \sigma$ limit.** Interpolation uses the plain Gaussian ($a_0 = 1$,
+   $a_2 = 0$), matching the closed-form FCM volume average.
 
 `test/test_single_sphere_mobility.jl`:
 
 9. **Single-sphere periodic self-mobility (end-to-end).** One particle, force
-   `F`, `Σ/σ = 1`, full pipeline `wrap → assign → sort → spread → solve →
-   interpolate`. Compare `V` to the continuum periodic self-mobility
-   $\widetilde{\bm V}_\text{self} = \tfrac{1}{L^3}\sum_{\bm k \ne 0}
-   \tfrac{e^{-\sigma^2 k^2}}{\mu k^2}(\bm I - \hat{\bm k}\hat{\bm k}^\top)\bm F$
-   (the Fourier-space form of the regularised Stokeslet, paper eq 205–207,
-   convolved with the kernel on both sides), summed over the reciprocal
-   lattice $\bm k = (2\pi/L)\bm n$ up to where $e^{-\sigma^2 k^2}$ falls below
-   a documented cutoff. Tolerance is the grid-discretisation / aliasing error
-   for the chosen `Σ/Δx`, documented inline. First test exercising all five
-   steps composed.
+   $\boldsymbol{F}$, $\Sigma/\sigma = 1$, full pipeline. Compare $\boldsymbol{V}$ to the
+   continuum periodic self-mobility — the reciprocal-lattice sum
+   $\tilde{\boldsymbol{V}}_{\text{self}} = \tfrac{1}{L^3}\sum_{\boldsymbol{k}\neq 0} \tfrac{e^{-\sigma^2 k^2}}{\mu k^2}(\boldsymbol{I} - \hat{\boldsymbol{k}}\hat{\boldsymbol{k}}^T)\boldsymbol{F}$
+   (the Fourier form of the regularised Stokeslet, §3, equations (32)–(33) and Appendix A, convolved with the kernel on
+   both sides), summed over the reciprocal lattice $\boldsymbol{k} = (2\pi/L)\boldsymbol{n}$
+   up to where $e^{-\sigma^2 k^2}$ falls below a documented cutoff. Tolerance is the
+   grid-discretisation / aliasing error for the chosen $\Sigma/h$, documented inline. First
+   test exercising all five steps composed.
 
-`test/test_interpolate_velocities_inferred.jl` — `@inferred` for
-`interpolate_velocities!` and `_interpolate_velocities_kernel!`,
-`Float32`/`Float64`.
+`test/test_interpolate_velocities_inferred.jl` — `@inferred` for the wrapper and the
+kernel. `test/test_interpolate_velocities_allocations.jl` — `@ballocated == 0`.
+`test/test_jet.jl` — `JET.@test_call interpolate_velocities!`. `test/test_aqua.jl` — package
+hygiene.
 
-`test/test_interpolate_velocities_allocations.jl` — `@ballocated == 0` for the
-wrapper and the kernel.
+## Differences from cuFCM
 
-`test/test_jet.jl` — `JET.@test_call interpolate_velocities!` walks the call
-graph for inference health.
+> Comparison against the C++/CUDA reference implementation, kept for validation during
+> development and removed once the port is complete.
 
-`test/test_aqua.jl` — `Aqua.test_all` covers module hygiene (unchanged).
+Audited `cuFCM/src/CUFCM_FCM.cu` (`cufcm_particle_velocities_bpp_shared_dynamic`) and
+`cuFCM/src/CUFCM_SOLVER.cu` (`FCM_solver::gather`). Only the active force-only path is
+considered. cuFCM independently confirms the adjoint constraint: its spread weight is
+$g_x g_y g_z (1 + \cdots)$ with **no** $h^3$, and its interpolate weight is the *identical*
+term times $h^3$ — so it too implements $\tilde{\mathcal{J}} = h^3\tilde{\mathcal{J}}^{\dagger\top}$
+exactly.
+
+| Facet | cuFCM | This package | Decision |
+|---|---|---|---|
+| Quadrature weight | $h^3$ folded into the per-grid-point factor | $h^3$ applied once per particle to the accumulated velocity | **Keep** (diverge on location) — algebraically identical, cheaper, and keeps the adjoint test bit-exact. |
+| Stencil precompute | nearest-anchor, norm, gauss, wrap — byte-identical to its spread kernel | identical; shared with the spread via `_fill_particle_stencil!` | **Adopt** — reinforces the shared-helper extraction. |
+| Polynomial factor | `1 + temp3·r² − temp4` | $(a_0 + a_2 r^2)$ | **Keep** — algebraically identical (same as spread). |
+| $r^2$ handling | stores signed `xdis/ydis/zdis`, recomputes $r^2$ | stores $r^2$ directly | **Keep** the $r^2$-only precompute. |
+| Velocity-grid read | three SoA arrays | `components(fluid_velocity)`, column-major | **Adopt** — same SoA layout, `StructArray` wrapper. |
+| Stencil reduction | block reduce over threads | serial scalar accumulation | **Keep** serial for the CPU MVP; block-reduce is the GPU pattern. |
+| Output / unsort | writes in sorted order; unsort handled separately | writes `V[:, original_index[s]]` directly (inverse permutation folded in) | **Diverge** — consistent with materialising sorted arrays in step 2; the fold is exactly $P^T$, preserving adjointness. |
+| Rotation/dipole | `rotation == 1` branch | none — force-only | **Out of scope.** |
+| `USE_REGULARFCM` | compile-time $\Sigma = \sigma$ branch | no flag; the $\Sigma = \sigma$ limit subsumes it | **Subsume via the limit.** |
+
+For the future GPU backend, interpolation is the gather mirror of the spread's scatter (one
+block per particle, threads over the $M_G^3$ stencil, a block reduce to sum). Unlike the
+spread's atomic adds, the gather has no write race.

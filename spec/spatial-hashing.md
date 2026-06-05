@@ -9,8 +9,8 @@ with triply-periodic boundary conditions. Fast FCM is accelerated by decoupling 
 discretisation level of the spectral solver from the width of the delta distribution
 approximation.
 
-The grid for the spectral solver is a uniform discretisation with $M_x, M_y, M_z$ gripoints in
-directions $z, y, z$, with spacings $h_x, h_y, h_z$. The total number of gridpoints is then $M = M_x M_y M_z$.
+The grid for the spectral solver is a uniform discretisation with $M_x, M_y, M_z$ grid points in
+directions $x, y, z$, with uniform spacing $h$ (equal across axes). The total number of grid points is then $M = M_x M_y M_z$.
 
 The first step in acceleration involves a grouping of the $N$ particles at positions $\left\{ \boldsymbol{Y}_n \right\}_{n = 1}^N$ in the domain into
 _cells_: a partition of the domain into rectangular prisms. The cells are generated so that
@@ -26,180 +26,192 @@ In the code, we define
 - `L` $= (L_x, L_y, L_z)$,
 - `N` $= N$,
 - `Y` $= (\boldsymbol{Y}_1, \dots, \boldsymbol{Y}_N)$,
-- `R_\c` $= R_c$, 
+- `R_c` $= R_c$,
 - `num_cells` $= (m_x, m_y, m_z)$ and
-- `cell_hash[n]` $= \text{cell index of particle } n$.
+- `cell_hash[n]` $=$ the cell index of particle $n$.
+
+## Method
+
+### Cell geometry and the covering guarantee
+
+The number of cells per axis is
+$$
+m_i = \max\!\left(\left\lfloor \frac{L_i}{R_c} \right\rfloor, 3\right)
+\qquad (\text{paper §4, Step 1}).
+$$
+This lets the pairwise correction (step 6) find every neighbour within $R_c$ by
+inspecting only a particle's own cell and its 26 immediate neighbours — the
+$3 \times 3 \times 3$ block centred on it. Why the block suffices splits into two
+regimes, depending on which term of the $\max$ is active.
+
+**The box is at least three cutoffs wide on axis $i$** ($L_i/R_c \geq 3$). Then
+$m_i = \lfloor L_i/R_c \rfloor \leq L_i/R_c$, so each cell is at least as wide as the
+cutoff, $L_i/m_i \geq R_c$. Take a particle at $\boldsymbol{Y}_n$ in the cell with
+coordinates $(c_x, c_y, c_z)$; any particle within $R_c$ of it differs by at most
+$R_c \leq L_i/m_i$ — one cell width — on each axis, so its cell coordinate on axis $i$
+differs from $c_i$ by at most one. The $3 \times 3 \times 3$ block therefore contains
+the whole $R_c$-ball.
+
+**The box is narrower than three cutoffs on axis $i$** ($2 \leq L_i/R_c < 3$, the range
+still permitted by the pairwise-correction precondition $R_c \leq \min(L)/2$). The floor
+clamps to $m_i = 3$, and the cell may now be narrower than the cutoff, $L_i/m_i < R_c$.
+Coverage holds for a different reason: with only three cells on the axis, the neighbour
+offsets $\{-1, 0, +1\} \bmod 3 = \{0, 1, 2\}$ span every cell, so the
+$3 \times 3 \times 3$ block sweeps the whole axis and no neighbour can be missed.
+
+In both regimes the floor $m_i \geq 3$ also guarantees that, under periodicity, the 26
+neighbours are distinct cells, so none is double-counted as its own neighbour (with
+$m_i = 2$ the offsets $\{-1, +1\} \bmod 2$ would collide).
+
+### Hashing a position to a cell
+
+A wrapped position $\boldsymbol{Y}_n \in [0, L_i)$ maps to the cell coordinate
+$$
+c_i = \min\left(\left\lfloor Y_{n,i} \frac{1}{\text{cell size}_i} \right\rfloor, m_i - 1\right),
+$$
+and the cell index linearises the three coordinates with $x$ fastest and $z$ slowest, as
+in the Summary,
+$$
+\text{cell\_hash}[n] = c_x + (c_y + c_z m_y) m_x .
+$$
+The $\min(\cdot, m_i - 1)$ clamp guards one floating-point corner: if $Y_{n,i}$ is just
+below $L_i$ and $Y_{n,i}/\text{cell size}_i$ rounds up to exactly $m_i$, the floor
+would give $m_i$ — one past the last cell — and the clamp folds it back to $m_i - 1$.
+
+### Periodic wrapping
+
+Positions are folded into $[0, L_i)$ by $Y_{n,i} \mapsto \operatorname{mod}(Y_{n,i}, L_i)$
+before hashing. This is the canonical wrap point for the whole pipeline: after it, every
+later step may assume $\boldsymbol{Y}_n \in \Omega$.
 
 ## Contract
 
 ### Cold-path input (user-supplied to `FFCMConfig`)
 
-- `L::NTuple{3, T}` $= (L_x, L_y, L_z)$. Corner-origin matches the
-  paper convention and the cuFCM C++ reference, so every step can be
-  cross-checked against the paper without a coordinate translation in the
-  way.
-- Cutoff radius `R_c::T` $= R_c$ for the pairwise correction.
-- Particle count `N::Integer` $= N$. Fixed for the lifetime of the
-  `FFCMConfig`; changing `N` requires a new configuration.
+- `L` $= (L_x, L_y, L_z)$ (`NTuple{3, T}`) — the periodic box. The corner origin matches
+  the paper convention, so every step can be cross-checked against the paper without a
+  coordinate shift.
+- `R_c` $= R_c$ (`T`) — the cutoff radius for the pairwise correction.
+- `N` $= N$ (`Integer`) — the particle count, fixed for the lifetime of the
+  `FFCMConfig`; changing it requires a new configuration.
 
 ### Cold-path derived state (computed once, stored on `FFCMConfig`)
 
-- `num_cells::NTuple{3, Int32}` — number of cells per axis, with
-  components `num_cells[i]` $= m_i =$ `max(floor(Int32, L_i / R_c), Int32(3))`.
-  The `max(·, 3)` floor guarantees that for any particle position the
-  26-neighbour stencil covers all `R_c`-balls (paper §4 Step 1).
-- `cell_size::NTuple{3, T}` — cell extents `cell_size[i]` $= L_i / m_i$.
-  Invariant `cell_size_i ≥ R_c` by construction.
-- `inv_cell_size::NTuple{3, T}` — precomputed `1 / cell_size[i]` so the hot
+- `num_cells` $= (m_x, m_y, m_z)$ (`NTuple{3, Int32}`), with
+  `num_cells[i] = max(floor(Int32, L_i / R_c), Int32(3))`.
+- `cell_size` $= (L_i / m_i)$ (`NTuple{3, T}`) — the cell extents, $\geq R_c$ when
+  $L_i/R_c \geq 3$ and $L_i/3$ otherwise (see the covering guarantee in Method).
+- `inv_cell_size` $= (1 / \text{cell size}_i)$ (`NTuple{3, T}`) — precomputed so the hot
   path multiplies instead of divides.
-- `cell_hash::Vector{Int32}` — length-`N` buffer that the hot path writes
-  into `cell_hash[n]` is the cell index of particle `n`.
+- `cell_hash` (`Vector{Int32}`, length `N`) — the buffer the hot path writes each
+  particle's cell index into.
 
 ### Hot-path input (per `mobility!` call)
 
-- `Y::AbstractMatrix{T}` of shape `(3, N)` — particle positions. Throughout
-  this spec, paper notation is used: `i ∈ {x, y, z}` (equivalently
-  $i ∈ \{1, 2, 3\}$) is the Cartesian axis index, and `n ∈ {1, …, N}` is
-  the particle index. The Julia layout maps to $Y^n_i = $ `Y[i, n]`.
+- `Y` (`AbstractMatrix{T}`, shape `(3, N)`) — the particle positions, `Y[i, n]`.
   Positions outside $\Omega$ are tolerated and folded by `wrap_positions!`.
 
 ### Hot-path output
 
-- `cell_hash[n] = x_c + (y_c + z_c · m_y) · m_x` for `n ∈ 1:N`. The encoding
-  lays `x` out fastest and `z` slowest, matching
-  `cuFCM/src/CUFCM_CELLLIST.cu:create_hash_gpu`.
+- `cell_hash[n]` $= c_x + (c_y + c_z m_y) m_x$ for $n \in 1{:}N$, with the cell
+  coordinates of Method. The encoding lays $x$ out fastest and $z$ slowest.
 
 ### Periodicity contract
 
-`wrap_positions!` is the canonical wrap point and is the first call inside
-`mobility!`. After it returns, every downstream step may assume
-$Y^n_i \in [0, L_i)$ for every particle `n` and every axis `i`. The hash
-kernel additionally clamps each cell coordinate to `m_i - 1` to defend
-against the fp-roundoff corner case where `mod(y, L_i)` rounds to
-numerically `L_i`.
+`wrap_positions!` is the canonical wrap point and the first call inside `mobility!`.
+After it returns, every downstream step may assume $\boldsymbol{Y}_n \in [0, L_i)$. The
+hash additionally clamps each cell coordinate to $m_i - 1$ to defend against the
+fp-roundoff corner where $\operatorname{mod}(Y, L_i)$ rounds up to numerically $L_i$.
 
-Boundary cases (post-wrap, for any particle `n`):
+### Boundary cases (post-wrap, for any particle $n$)
 
-- $Y^n_i = 0$ (lower closed edge) → cell coordinate $0$ on axis $i$.
-- $Y^n_i = L_i$ (open upper edge, reachable only by fp roundoff) → cell
-  coordinate $m_i - 1$ after clamp.
+- $Y_{n,i} = 0$ (lower closed edge) → cell coordinate $0$ on axis $i$.
+- $Y_{n,i} = L_i$ (open upper edge, reachable only by fp roundoff) → cell coordinate
+  $m_i - 1$ after the clamp.
 
-## API
+## Implementation
 
-```julia
-"""
-    FFCMConfig{T}(; L, R_c, N)
+`assign_cells!(config, Y)` is the hot-path entry for this step: it writes each
+particle's cell index into `config.cell_hash`, assuming `Y` has already been folded into
+$\Omega$. It delegates to the function-barrier kernel
+`_assign_cells_kernel!(cell_hash, Y, inv_cell_size, num_cells)`, which takes naked buffers
+and tuples so it is type-stable and independently testable; the kernel performs the floor,
+the clamp, and the linearisation of Method.
 
-Cold-path configuration of the Fast FCM mobility operator. Owns the cell
-geometry derived from the periodic domain `L = (L_x, L_y, L_z)` and the
-cutoff `R_c`, plus the hot-path buffers sized for `N` particles. The
-configuration is built once and reused across many `mobility!` calls; all
-per-call work writes into pre-allocated buffers owned by this struct.
-"""
-struct FFCMConfig{T <: AbstractFloat}
-    L::NTuple{3, T}
-    R_c::T
-    num_cells::NTuple{3, Int32}
-    cell_size::NTuple{3, T}
-    inv_cell_size::NTuple{3, T}
-    cell_hash::Vector{Int32}
-end
+Positions are folded by `wrap_positions!`, which has two forms. `wrap_positions!(dest, src, L)`
+writes the wrapped positions of `src` into a separate buffer `dest`, so `mobility!` can
+wrap into a `config`-owned scratch without touching the caller's array; the in-place
+`wrap_positions!(Y, L)` folds `Y` itself. Both are idempotent, and the fp-roundoff corner
+where $\operatorname{mod}(Y, L)$ rounds to exactly $L$ is left to the cell-index clamp
+rather than handled here.
 
-"""
-    wrap_positions!(Y, L) -> Y
-
-Fold each column of `Y` (a `3×N` matrix of particle positions) into the
-canonical periodic domain `[0, L_a)` for each axis `a`. Idempotent. The
-fp-roundoff corner case where `mod(y, L)` rounds to exactly `L` is left
-to the downstream cell-index clamp in `_assign_cells_kernel!`.
-"""
-function wrap_positions!(Y::AbstractMatrix{T}, L::NTuple{3, T}) where {T} end
-
-"""
-    assign_cells!(cfg, Y) -> cfg.cell_hash
-
-Write each particle's cell index into `cfg.cell_hash`. Assumes `Y` has
-already been folded into the canonical domain by `wrap_positions!`. The
-hash linearises the 3-D cell coordinate with `x` fastest and `z` slowest.
-"""
-function assign_cells!(cfg::FFCMConfig{T}, Y::AbstractMatrix{T}) where {T} end
-```
-
-The underscore-prefixed
-`_assign_cells_kernel!(cell_hash, Y, inv_cell_size, num_cells)` is the
-function-barrier kernel: it takes naked tuples and buffers, so it is
-independently testable and benefits from Julia's standard type-stability
-pattern.
-
-## Cold-path vs hot-path
+The cell geometry (`num_cells`, `cell_size`, `inv_cell_size`) and the `cell_hash` buffer
+are built once by the `FFCMConfig` constructor.
 
 | Phase | Allocations | Functions |
 |---|---|---|
 | Cold | OK | `FFCMConfig` constructor: derive `num_cells`, `cell_size`, `inv_cell_size`; allocate `cell_hash`. |
-| Hot  | `@ballocated == 0` | `wrap_positions!(Y, L)` then `assign_cells!(cfg, Y)`. |
+| Hot  | `@ballocated == 0` | `wrap_positions!(Y, L)` then `assign_cells!(config, Y)`. |
 
 The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
 
 ## Performance notes
 
-- `Y::AbstractMatrix{T}` of shape `(3, N)` interacts well with Julia's
-  column-major layout: per particle `n`, the three reads `Y[1, n]`,
-  `Y[2, n]`, `Y[3, n]` are contiguous.
-- The hash kernel avoids division by precomputing `inv_cell_size`. The
-  `min` clamp lowers to `vminss`/`vminsd` on x86 — branch-free and
-  SIMD-compatible.
-- Both passes use `@inbounds @simd for n in axes(Y, 2)`. Bounds are safe
-  because `cell_hash` was allocated to length `N = size(Y, 2)` at
-  construction and `Y` is iterated by its own column axis.
-- `Int32` is the cell-index width; `num_cells ≤ 2^31` covers any realistic
-  FCM run (matches cuFCM's `int` width).
-
-## Diffs from cuFCM
-
-The cuFCM reference (`cuFCM/src/CUFCM_CELLLIST.cu`,
-`CUFCM_SOLVER.cu`, `CUFCM_DATA.cu`) was audited against this design.
-
-| Facet | cuFCM | This package |
-|---|---|---|
-| Domain origin | `[0, L_a)` | same |
-| Hash linearisation | `x_c + (y_c + z_c·m_y)·m_x` | same |
-| Cell-count derivation | `max(L_i/R_c, 3)` then cast to int | `max(floor(Int32, L_i/R_c), 3)` (equivalent for positive arguments) |
-| Anisotropy | supported via grid dims | supported via `L::NTuple{3, T}` |
-| Hash index type | `int` (32-bit) | `Int32` |
-| Memory layout | AoS `Y[3*np + k]` | column-major `Matrix{T}(3, N)` (identical access pattern) |
-| Position wrap | separate `box<<<>>>` kernel mutates `Y` in place | `wrap_positions!` mutates `Y` in place (same model) |
-| Upper-edge roundoff | `if(x == boxsize) x = 0` inside `images()` | cell-index clamp `min(·, num_cells - 1)` inside the kernel |
-| Cell-count safety floor | `max(·, 3)` in C++ | same |
-| Function-pointer indirection (`linear_encode`/`icell`) | yes | dropped — overkill for our use |
-
-The single behavioural difference is the location of the upper-edge
-roundoff fix: cuFCM patches the wrapped position; we clamp the cell
-index. Both produce a valid hash in the corner case; the cell-index clamp
-keeps `wrap_positions!` itself branch-light.
+- Storing `Y` as a `(3, N)` matrix suits Julia's column-major layout: per particle the
+  three reads `Y[1, n]`, `Y[2, n]`, `Y[3, n]` are contiguous.
+- The hash avoids division by multiplying by the precomputed `inv_cell_size`. The `min`
+  clamp lowers to a branch-free `vminss`/`vminsd` on x86, so it stays SIMD-compatible.
+- Both passes use `@inbounds @simd for n in axes(Y, 2)`. The bounds are safe because
+  `cell_hash` was allocated to length `N = size(Y, 2)` and `Y` is iterated by its own
+  column axis.
+- `Int32` is the cell-index width; the total cell count fits well within `Int32` for any
+  realistic FCM run.
 
 ## Verification
 
-End-to-end correctness for this step is established by the test suite:
+End-to-end correctness for this step is established by the test suite.
 
-- `test/test_cell_geometry.jl` — `FFCMConfig` constructor: derived
-  `num_cells`, `cell_size`, `inv_cell_size`, the tiny-box `max(·, 3)`
-  floor, and argument validation.
-- `test/test_wrap_positions.jl` — `wrap_positions!`: identity on
-  already-wrapped input, periodicity, idempotence, edge cases including
-  the upper-boundary `Y = L` → `0` parity with cuFCM's `images()` fixup.
-- `test/test_assign_cells_kernel.jl` — `_assign_cells_kernel!`:
-  hand-computed hashes for known cell layouts; anisotropic stride;
-  upper-edge roundoff clamp regression.
-- `test/test_assign_cells.jl` — `assign_cells!` outer wrapper agrees
-  with the kernel.
-- `test/test_assign_cells_inferred.jl` — `@inferred` type stability
-  for `Float32` and `Float64`.
-- `test/test_assign_cells_allocations.jl` — `@ballocated == 0` for
-  both passes and the kernel.
-- `test/test_aqua.jl` — `Aqua.test_all` against the module (method
-  ambiguity, stale [deps]/[extras], project consistency).
-- `test/test_jet.jl` — `JET.@test_call` on each hot-path entry point
-  for `Float32` and `Float64`, walking the full call graph.
+- `test/test_cell_geometry.jl` — the `FFCMConfig` constructor: the derived `num_cells`,
+  `cell_size`, `inv_cell_size`, the small-box $\max(\cdot, 3)$ floor, and argument
+  validation.
+- `test/test_wrap_positions.jl` — `wrap_positions!`: identity on already-wrapped input,
+  periodicity, idempotence, and the edge cases, including the upper-boundary
+  $Y = L \to 0$ behaviour.
+- `test/test_assign_cells_kernel.jl` — `_assign_cells_kernel!`: hand-computed hashes for
+  known cell layouts, anisotropic stride, and the upper-edge roundoff clamp.
+- `test/test_assign_cells.jl` — the `assign_cells!` wrapper agrees with the kernel.
+- `test/test_assign_cells_inferred.jl` — `@inferred` type stability for `Float32` and
+  `Float64`.
+- `test/test_assign_cells_allocations.jl` — `@ballocated == 0` for both passes and the
+  kernel.
+- `test/test_aqua.jl` — `Aqua.test_all` (method ambiguity, stale deps/extras, project
+  consistency).
+- `test/test_jet.jl` — `JET.@test_call` on each hot-path entry point for `Float32` and
+  `Float64`, walking the full call graph.
 
-Tolerances: spatial hashing is integer arithmetic; cell-index equality is
-exact. Float-roundoff cases are pinned by explicit boundary tests.
+Spatial hashing is integer arithmetic, so cell-index equality is exact; the
+floating-point edge cases are pinned by explicit boundary tests rather than a tolerance.
+
+## Differences from cuFCM
+
+> Comparison against the C++/CUDA reference implementation, kept for validation during
+> development and removed once the port is complete.
+
+The cuFCM reference (`cuFCM/src/CUFCM_CELLLIST.cu`, `CUFCM_SOLVER.cu`, `CUFCM_DATA.cu`) was
+audited against this design.
+
+| Facet | cuFCM | This package |
+|---|---|---|
+| Domain origin | $[0, L_i)$ | same |
+| Hash linearisation | $c_x + (c_y + c_z m_y) m_x$ | same |
+| Cell-count derivation | `max(L_i/R_c, 3)` then cast to int | `max(floor(Int32, L_i/R_c), 3)` (equivalent for positive arguments) |
+| Anisotropy | supported via grid dims | supported via `L::NTuple{3, T}` |
+| Hash index type | `int` (32-bit) | `Int32` |
+| Memory layout | AoS `Y[3·np + k]` | column-major `Matrix{T}(3, N)` (identical access pattern) |
+| Position wrap | a separate kernel mutates `Y` in place | `wrap_positions!` (in-place form mutates `Y`; out-of-place form writes a scratch buffer) |
+| Upper-edge roundoff | `if (x == boxsize) x = 0` inside `images()` | cell-index clamp `min(·, m_i − 1)` inside the kernel |
+| Function-pointer indirection (`linear_encode`/`icell`) | yes | dropped — unnecessary here |
+
+The single behavioural difference is the location of the upper-edge roundoff fix: cuFCM
+patches the wrapped position, while this package clamps the cell index. Both produce a
+valid hash in the corner case; the cell-index clamp keeps `wrap_positions!` branch-light.

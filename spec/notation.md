@@ -78,6 +78,6 @@ collected here.
   real-space correction; their closed forms are in
   [pairwise-correction.md](pairwise-correction.md).
 - $A, B, \delta$ — the two pair scalars of the correction tensor
-  $A\boldsymbol{I} + B\boldsymbol{x}\boldsymbol{x}^\top$ and the self-correction
+  $A\boldsymbol{I} + B\boldsymbol{x} \otimes \boldsymbol{x}$ and the self-correction
   scalar; code `isotropic_coefficient`, `parallel_coefficient`,
   `self_correction_term`.
