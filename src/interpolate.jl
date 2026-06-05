@@ -134,6 +134,11 @@ function _interpolate_velocities_kernel!(
             inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
         )
 
+        # Gather into three scalar accumulators (vx/vy/vz), not an SVector, and
+        # store the result with the explicit per-component writes below. This
+        # keeps the kernel allocation-free and the accumulators register-resident.
+        # A more vectorial form (the C4 readability item) is deferred and must be
+        # benchmark-gated before it replaces this.
         vx = zero(T)
         vy = zero(T)
         vz = zero(T)

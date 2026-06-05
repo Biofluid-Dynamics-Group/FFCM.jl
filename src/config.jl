@@ -172,6 +172,11 @@ function FFCMConfig{T}(;
     fh_z = zeros(Complex{T}, fft_M_x, M_y, M_z)
     fluid_hat = StructArray{SVector{3, Complex{T}}}((fh_x, fh_y, fh_z))
 
+    # Wavevector components in FFTW's layout. The r2c transform keeps only the
+    # non-negative x-frequencies (indices `1:fft_M_x = M_x÷2 + 1`). The full y/z
+    # axes use FFTW's wrap-around order: the first half (index ≤ M÷2 + 1) holds
+    # the non-negative frequencies `k = 2π(idx-1)/L`, the second half the negative
+    # ones `k = 2π(idx-1-M)/L`.
     PI2 = T(2) * T(π)
     k_x = T[PI2 * (i - 1) / L[1] for i in 1:fft_M_x]
     k_y = T[
