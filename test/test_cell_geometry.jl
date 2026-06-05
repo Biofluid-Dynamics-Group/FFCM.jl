@@ -69,7 +69,7 @@ end
     )
     # R_c above half the smallest box length makes the minimum image ambiguous
     # and would allow a particle to correct against its own image
-    # (paper outline.tex:318); the constructor rejects it. R_c = min(L)/2 is the
+    # (paper §4); the constructor rejects it. R_c = min(L)/2 is the
     # boundary and is allowed.
     L_thin = (4.0, 4.0, 2.0)
     kw_thin = _fcm_grid_kwargs(L_thin)

@@ -4,7 +4,7 @@ using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!,
     spread_forces!, stokes_solve!, interpolate_velocities!, mobility!
 
 # Reciprocal-lattice sum of the σ-regularised periodic Stokeslet self-mobility
-# (paper eq 205-207, Fourier form), the true M^VF self-mobility a single particle
+# (paper §3 equations (32)–(33), Fourier form), the true M^VF self-mobility a single particle
 # feels from its own periodic images. Independent of Σ.
 function _periodic_self_mobility_xx(σ::T, μ::T, Lx::T; n_max::Int = 15) where {T}
     s = zero(T)
@@ -24,7 +24,7 @@ end
     # for one particle with unit x-force in the standard-FCM degenerate
     # limit (Σ/σ = 1). The interpolated self-velocity is the periodic FCM
     # self-mobility, whose closed form is the reciprocal-lattice sum of the
-    # Gaussian-regularised periodic Stokeslet (paper eq 205–207, the
+    # Gaussian-regularised periodic Stokeslet (paper §3 equations (32)–(33), the
     # Stokeslet convolved with the kernel on both the spread and the
     # interpolate side):
     #
@@ -59,18 +59,9 @@ end
 
     σ, μ, Lx = config.σ, config.μ, L[1]
     # n_max = 15 ⇒ e^{-σ²k²} ≈ e^{-44} at the truncation edge — far below
-    # round-off, so the lattice sum is converged.
-    n_max = 15
-    self_mobility_xx = zero(T)
-    for nx in -n_max:n_max, ny in -n_max:n_max, nz in -n_max:n_max
-        (nx == 0 && ny == 0 && nz == 0) && continue
-        kx = T(2π * nx / Lx)
-        ky = T(2π * ny / Lx)
-        kz = T(2π * nz / Lx)
-        k² = kx * kx + ky * ky + kz * kz
-        self_mobility_xx += exp(-σ^2 * k²) / (μ * k²) * (one(T) - kx * kx / k²)
-    end
-    self_mobility_xx /= Lx^3
+    # round-off, so the lattice sum is converged. Same oracle the six-step test
+    # uses, so the closed-form reference lives in one place.
+    self_mobility_xx = _periodic_self_mobility_xx(σ, μ, Lx; n_max = 15)
 
     # Grid-resolution / stencil-truncation limited (≈ 9e-7 at this σ/h),
     # not round-off; rtol = 1e-5 holds with ~10× margin.
@@ -94,7 +85,7 @@ end
     # modified-kernel width Σ*. For a single particle the only correction is the
     # self term (no neighbour within R_c; the periodic images at distance L ≫ R_c
     # contribute a correction ~exp(−L²/4Σ²) ≈ 1e-13 here, below grid error and
-    # consistent with the paper's large-box assumption, outline.tex:318).
+    # consistent with the paper's large-box assumption, paper §4).
     #
     # The grid step alone (steps 3-5) computes M̃ at width Σ; adding the self term
     # (step 6) must recover the σ-regularised reciprocal-lattice sum — the same

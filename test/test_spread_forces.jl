@@ -26,7 +26,7 @@ using StructArrays: components
         config.F_sorted[3, 1] = T(0)
         spread_forces!(config)
 
-        # Reference computed fresh from paper eq 267 expanded as
+        # Reference computed fresh from paper §3 equation (22) expanded as
         # Δ + (σ² - Σ²)/2 · ∇²Δ, where ∇²Δ = (r²/Σ⁴ - 3/Σ²) Δ.
         σ, Σ, h = config.σ, config.Σ, config.h
         Y_n = (T(2), T(2), T(2))
@@ -47,7 +47,7 @@ end
 @testset "Stencil anchors on the nearest grid point, biased low for even M_G (cuFCM convention)" begin
     # For Y/h = 0.3 the nearest grid point is index 0 (0-based); for
     # Y/h = 0.7 it is index 1. With M_G even the stencil extends M_G/2
-    # below the anchor and M_G/2 - 1 above (paper §5 Table 2 calibration
+    # below the anchor and M_G/2 - 1 above (paper §5 Table 1 calibration
     # convention, matching cuFCM `my_rint(Y/dx) - ngd/2 + (i mod ngd)`).
     # We pick `M_G = 4` and an `M_x = 16` grid so the stencil is strictly
     # smaller than the grid and the lower- and upper-half anchors give
@@ -89,14 +89,14 @@ end
     # ∫ Δ̃(x; Σ) d³x = 1 exactly (the Laplacian of a Gaussian integrates
     # to zero), so Σₙ Fₙ should be conserved by the spread up to the
     # truncation error of the M_G^3 stencil and the Riemann-sum
-    # discretisation of the integral. Paper Table 2 (`outline.tex:600`)
-    # tabulates this error for chosen (M_G, Σ/h).
+    # discretisation of the integral. Paper Table 1 tabulates this error for
+    # chosen (M_G, Σ/h).
     for T in (Float32, Float64)
         # Parameters chosen so the stencil radius `(M_G/2)·h ≈ 7.1·Σ`
         # captures the Gaussian to ~1 - erf(7.1/√2)³ ≈ 0 mass — far above
         # the ~3.4·Σ threshold for sub-percent per-particle conservation.
         # `Σ/h ≈ 1.13` matches the paper's lowest-tolerance regime
-        # (paper Table 2, `outline.tex:600`). The box `L = 16` keeps the
+        # (paper Table 1). The box `L = 16` keeps the
         # nearest periodic image at ~7·Σ from any particle, where the
         # kernel value is < 1e-10 — far below the rounding floor.
         L = (T(16), T(16), T(16))

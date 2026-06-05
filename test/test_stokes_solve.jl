@@ -17,8 +17,8 @@ const _STOKES_KWARGS = (;
     μ = 1.0,
 )
 
-@testset "Viscosity μ is a required, positive cold-path parameter (paper eq 152)" begin
-    # Paper writes the viscosity as η (eq 152, outline.tex:152); this
+@testset "Viscosity μ is a required, positive cold-path parameter (paper §2)" begin
+    # Paper writes the viscosity as η (§2 Stokes momentum balance); this
     # package writes μ (see `spec/stokes-solve.md` notation note). The
     # parameter is mandatory because viscosity is dimensionally meaningful
     # and a wrong default would silently scale every velocity in the
@@ -451,7 +451,7 @@ end
     # particle in the standard-FCM degenerate limit (Σ/σ = 1). With one
     # particle at the box centre and unit x-force, the resulting velocity
     # field is the periodised regularised Stokeslet
-    # `S(x_g - Y; σ√2) · ê_x` (paper eq 205–207). For a relaxed
+    # `S(x_g - Y; σ√2) · ê_x` (paper §3 equations (32)–(33)). For a relaxed
     # end-to-end check we pin:
     #   - decay of |u| with distance (Stokeslet falls off as 1/r at far
     #     field; we assert near-particle vs far-particle magnitudes),

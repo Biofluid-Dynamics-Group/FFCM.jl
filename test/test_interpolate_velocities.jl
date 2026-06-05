@@ -15,7 +15,7 @@ _interp_atol(::Type{Float64}) = 1.0e-10
     # The mobility M^VF = J·L⁻¹·J† is positive-definite only because the
     # interpolation operator J is the exact discrete transpose of the
     # spreading operator J†, scaled by the trapezoidal weight h³
-    # (paper `outline.tex:324`). Concretely, for any grid field `u` and
+    # (paper §3). Concretely, for any grid field `u` and
     # any particle/component unit vector `e_{n,c}`:
     #
     #   ⟨interpolate(u), e_{n,c}⟩ = h³ · ⟨u, spread(e_{n,c})⟩.
@@ -140,7 +140,7 @@ end
     # One particle at the box centre on a cubic grid whose M_G³ stencil
     # covers every grid point, so the gather sums over the whole grid and
     # can be checked term-by-term against the closed-form modified kernel
-    # (paper eq 267, same expansion as the spread test).
+    # (paper §3 equation (22), same expansion as the spread test).
     for T in (Float32, Float64)
         L = (T(4), T(4), T(4))
         M = Int32(8)
@@ -194,7 +194,7 @@ end
     # ∫ Δ̃_n(x; Σ) d³x = 1 (the Laplacian term integrates to zero), so a
     # spatially constant velocity field interpolates to that same constant
     # at every particle, up to the M_G³ stencil truncation error (paper
-    # Table 2). Constant fields are wrap-safe, so particle placement is
+    # Table 1). Constant fields are wrap-safe, so particle placement is
     # unconstrained.
     for T in (Float32, Float64)
         L = (T(16), T(16), T(16))

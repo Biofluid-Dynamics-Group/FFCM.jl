@@ -33,12 +33,13 @@ end
 _corr_atol(::Type{Float32}) = 1.0f-6
 _corr_atol(::Type{Float64}) = 1.0e-10
 
-# --- Independent oracle: the full FCM pairwise tensors (paper eq:S1-S3, Q1-Q2, T),
-# assembled as 3×3 matrices. The correction is the difference of the two full
-# mobilities, M^VF − M̃^VF = S(σ√2) − S(Σ√2) − (σ²−Σ²)Q(Σ√2) − ¼(σ²−Σ²)²T(Σ√2)
-# (paper outline.tex:221,302). This is an algebraically-distinct route to the same
+# --- Independent oracle: the full FCM pairwise tensors (paper §2 equations
+# (8)–(10) and (16)–(17), §3 equation (30)), assembled as 3×3 matrices. The
+# correction is the difference of the two full mobilities,
+# M^VF − M̃^VF = S(σ√2) − S(Σ√2) − (σ²−Σ²)Q(Σ√2) − ¼(σ²−Σ²)²T(Σ√2)
+# (paper §3 equation (31)). This is an algebraically-distinct route to the same
 # tensor the implementation collapses into A·I + B·xxᵀ, so it cross-checks the
-# collapse and the eq:correction_VF erf-argument. `s` is the √2-scaled width.
+# collapse and the equation-(31) erf-argument. `s` is the √2-scaled width.
 
 _gaussian(r², s², ::Type{T}) where {T} =
     (T(2) * T(π) * s²)^(-T(3) / 2) * exp(-r² / (T(2) * s²))
@@ -125,11 +126,11 @@ end
     end
 end
 
-@testset "Self correction matches the r → 0 limit (eq:correction_VF_limit)" begin
-    # Paper appendix eq:correction_VF_limit (appendix.tex:52-54): the well-defined
-    # r → 0 diagonal of the pairwise correction, a scalar × I added to every
-    # particle. Pin `_self_correction` against the closed form written in an
-    # independent factorisation, over a sweep of Σ/σ and μ. a = σ√π (paper eq 163).
+@testset "Self correction matches the r → 0 limit (paper Appendix B eq (B.1))" begin
+    # Paper Appendix B, equation (B.1): the well-defined r → 0 diagonal of the
+    # pairwise correction, a scalar × I added to every particle. Pin
+    # `_self_correction` against the closed form written in an independent
+    # factorisation, over a sweep of Σ/σ and μ. a = σ√π (paper §2).
     for T in (Float32, Float64)
         a = one(T)
         σ = a / sqrt(T(π))
@@ -137,7 +138,7 @@ end
             Σ = Σ_over_σ * σ
             Σπ = Σ * sqrt(T(π))
             σ²_minus_Σ² = σ^2 - Σ^2
-            # Reference: appendix.tex:52-54, grouped term by term.
+            # Reference: paper Appendix B equation (B.1), grouped term by term.
             stokes = one(T) / (T(6) * T(π) * μ * a)
             mod_stokes = one(T) / (T(6) * T(π) * μ * Σπ)
             pd_term = σ²_minus_Σ² / (T(12) * μ * Σπ^3)
@@ -188,7 +189,7 @@ end
 
 @testset "Pair correction is symmetric (SPD precondition)" begin
     # Fₐᵀ (corr Fᵦ) = Fᵦᵀ (corr Fₐ): the correction operator is self-adjoint, so the
-    # split mobility stays symmetric positive-definite (paper outline.tex:320-324).
+    # split mobility stays symmetric positive-definite (paper §3).
     for T in (Float32, Float64)
         config = _corr_config(T; N = 5)
         Y = T[4.0 4.4 3.7 4.2 3.9;
