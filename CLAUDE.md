@@ -1,7 +1,7 @@
 # CLAUDE.md — agent operating guide for FFCM.jl
 
 This file tells Claude (and any other coding agent) how to work on this
-repository. Read it before doing anything else here.
+repository.
 
 ## 1. What this package is
 
@@ -23,13 +23,13 @@ mobility!(V, config, Y, F)   # Y, F: 3×N arrays; particles have unit radius
 
 with two backends:
 
-- **CPU**: `Base.Threads` + FFTW, lives entirely in `src/`.
-- **CUDA (NVIDIA GPUs)**: lives in `ext/cuFFCM/` and loads as a package
+- **CPU**: lives entirely in `src/`.
+- **CUDA (for NVIDIA GPUs)**: lives in `ext/cuFFCM/` and loads as a package
   extension only when the user has `CUDA.jl` in their environment.
 
-The intended downstream use is an iterative resistance solver that applies
-the mobility operator many times per linear solve, so the hot path is
-allocation-free and the GPU backend hides device traffic from callers.
+The intended downstream use is a direct or iterative resistance solver that applies
+the mobility operator (potentially many times per linear solve), so the hot path is
+allocation-free and the GPU backend hides host-device traffic from callers.
 
 ## 2. Ground rules
 
@@ -41,7 +41,7 @@ allocation-free and the GPU backend hides device traffic from callers.
 2. **`racksa/cuFCM` is a *reference* for implementation.** The
    original C++/CUDA implementation of FFCM by the paper's author. You may
    read it to learn orchestration tricks
-   for GPU.
+   for GPU. There is no specific need to copy the code exactly, but this repository aims to cover its functionality.
 
 3. **`spec/` is the source of truth for *what the code does*.** The paper is the
    source of truth for *why*; `spec/` cites the paper by section/equation
@@ -51,7 +51,7 @@ allocation-free and the GPU backend hides device traffic from callers.
 
 4. **Hot-path code is allocation-free.** Any function reachable from
    `mobility!` after the `config` is built must not allocate on the heap.
-   The `test/api/test_allocations.jl` suite enforces this with
+   The per-step `test/test_*_allocations.jl` files enforce this with
    `BenchmarkTools.@ballocated`.
 
 5. **Float32 is the default; Float64 must also work.** Code is
@@ -65,16 +65,24 @@ allocation-free and the GPU backend hides device traffic from callers.
    tests use the documented physical-error tolerance, not the round-off
    one. Relax any tolerance only with a documented numerical reason.
 
-6. **CPU first, CUDA second.** A new feature is implemented and tested on
-   `CPUBackend` before any CUDA work begins. Once the CPU version passes
+6. **CPU first, CUDA second.** A new feature is implemented and tested as normal CPU code before any CUDA work begins. Once the CPU version passes
    its accuracy tests, the CUDA implementation must pass a CPU↔CUDA parity
    test before it is considered done.
 
-7. **Each change leaves the design a little clearer.** Every PR-sized
-   piece of work should improve at least one abstraction, remove one
-   piece of complexity, or tighten one comment, in addition to its
-   stated task. (Git workflow itself is the user's domain; this rule
-   is about the code, not the commits.)
+7. **Every documented precondition is enforced.** If a docstring or
+   `spec/` contract states a precondition (`M_G ≥ 2`,
+   `M_G ≤ min(num_grid_points)`, `Y` is `3×N`, `R_c ≤ min(L)/2`), the
+   cold-path constructor or the hot-path entry validates it. A
+   precondition that the code relies on (especially anything guarded by
+   `@inbounds` or asserted by `@simd`) but does not check is a bug, not a
+   convenience. Validate at the outer boundary so kernels stay
+   check-free.
+
+8. **Cite the published paper, by section/equation.** Shipped artefacts —
+   `src/` docstrings and `spec/` bodies — reference Su & Keaveny (2024),
+   *J. Comput. Phys.* 510, 113060 by section and numbered equation. A `spec/` file leads with a paper-math method summary a paper-literate,
+   Julia-naive reader can follow; types, performance notes, and cuFCM
+   comparisons live in an "Implementation notes" appendix at the end.
 
 ## 3. Design boundaries
 
@@ -88,13 +96,20 @@ both user-set parameters and compiled state.
   change. Allocations are fine here; ergonomics matter.
 - **Hot path** — operator action: `mobility!(V, config, Y, F)` only.
   This is the single call made per iteration of the downstream iterative
-  solver. It is allocation-free and type-stable. Do **not** add
+  solver. Do **not** add
   logging-decorated variants, default-config helpers, or any wrapper that
   bypasses `config` on the hot path.
 
 This is the deep-module design: `config` plus `mobility!` together hide
 spreading, FFT, Stokes solve, real-space correction, and interpolation
 behind one cold constructor and one hot call.
+
+**Export only the public surface.** The module exports `FFCMConfig`,
+`mobility!`, and `FFCMMobility` — nothing else. The seven internal step
+functions (`spread_forces!`, `stokes_solve!`, …) stay reachable as
+`FFCM.spread_forces!` for tests and advanced use, but exporting them
+would leak the internal decomposition and contradict the deep-module
+intent. Tests import them qualified (`using FFCM: spread_forces!`).
 
 **Matrix-free `mul!` interface.** `config` plus `mobility!` together
 implement (or trivially adapt to via a thin operator wrapper that closes
@@ -182,7 +197,7 @@ worth reading (and what to take from each):
   and interpolation are sequenced and what stays on device.
 
 **Do not** copy their identifiers (`σ` is called something else there),
-file names, or class layout into our code. The paper notation rules.
+file names, or class layout into our code.
 
 ## 7. Don'ts
 
