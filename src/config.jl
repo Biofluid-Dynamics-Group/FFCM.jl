@@ -84,6 +84,32 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdTransform, BwdTransform}
     inverse_fourier_transform::BwdTransform
 end
 
+"""
+    _wrap_wavevectors(M, L) -> Vector{T}
+
+Per-axis Fourier wavevectors `k = 2π m / L` for a full (non-r2c) transform axis
+of length `M`, in FFTW's wrap-around order: the signed mode index is `m = j − 1`
+on the leading non-negative half (`j ≤ M÷2 + 1`) and `m = j − 1 − M` on the
+trailing negative half. Used for the `y` and `z` axes of the Stokes-solve grid
+(the `x` axis keeps only the non-negative half under the r2c transform and is
+built inline). Centralising the wrap-around convention keeps the FFTW layout in
+one place rather than copied per axis.
+
+# Arguments
+- `M::Int32`: the number of grid points along the axis.
+- `L::T`: the box length along the axis.
+
+# Returns
+- `Vector{T}` of length `M`: the per-axis wavevector components.
+
+See `spec/stokes-solve.md`.
+"""
+function _wrap_wavevectors(M::Int32, L::T) where {T}
+    twoπ = T(2) * T(π)
+    M_half_plus_one = M ÷ Int32(2) + Int32(1)
+    return T[twoπ * (j ≤ M_half_plus_one ? T(j - 1) : T(j - 1 - M)) / L for j in 1:M]
+end
+
 function FFCMConfig{T}(;
     L::NTuple{3, T},
     R_c::T,
@@ -172,21 +198,12 @@ function FFCMConfig{T}(;
     fh_z = zeros(Complex{T}, fft_M_x, M_y, M_z)
     fluid_hat = StructArray{SVector{3, Complex{T}}}((fh_x, fh_y, fh_z))
 
-    # Wavevector components in FFTW's layout. The r2c transform keeps only the
-    # non-negative x-frequencies (indices `1:fft_M_x = M_x÷2 + 1`). The full y/z
-    # axes use FFTW's wrap-around order: the first half (index ≤ M÷2 + 1) holds
-    # the non-negative frequencies `k = 2π(idx-1)/L`, the second half the negative
-    # ones `k = 2π(idx-1-M)/L`.
-    PI2 = T(2) * T(π)
-    k_x = T[PI2 * (i - 1) / L[1] for i in 1:fft_M_x]
-    k_y = T[
-        PI2 * (j ≤ M_y ÷ Int32(2) + Int32(1) ? T(j - 1) : T(j - 1 - M_y)) / L[2]
-        for j in 1:M_y
-    ]
-    k_z = T[
-        PI2 * (k ≤ M_z ÷ Int32(2) + Int32(1) ? T(k - 1) : T(k - 1 - M_z)) / L[3]
-        for k in 1:M_z
-    ]
+    # Fourier wavevectors in FFTW's layout. The r2c transform keeps only the
+    # non-negative x-frequencies (indices `1:fft_M_x = M_x÷2 + 1`); the full y/z
+    # axes use the wrap-around order built by `_wrap_wavevectors`.
+    k_x = T[T(2) * T(π) * (i - 1) / L[1] for i in 1:fft_M_x]
+    k_y = _wrap_wavevectors(M_y, L[2])
+    k_z = _wrap_wavevectors(M_z, L[3])
 
     forward_fourier_transform = plan_rfft(fx)
     inverse_fourier_transform = plan_brfft(fh_x, Int(M_x))

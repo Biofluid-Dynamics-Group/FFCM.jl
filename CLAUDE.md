@@ -136,7 +136,7 @@ linear map, without a separate adapter at the call site.
   [spec/cuda-conventions.md](spec/cuda-conventions.md) as they are
   validated. The only universal CUDA rule is the boundary one (§7): CUDA
   appears in `ext/`, never in `src/`.
-- The benchmark suite in `bench/` is the regression detector. Run it
+- The benchmark suite in `benchmark/` is the regression detector. Run it
   before claiming a perf improvement.
 - **Type stability is strict.** No abstract types in struct fields; no
   non-`const` globals captured by hot-path functions. Every public

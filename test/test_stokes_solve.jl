@@ -75,21 +75,21 @@ end
     @test length(config.k_y) == M[2]
     @test length(config.k_z) == M[3]
 
-    PI2 = 2π
+    2π = 2π
     @test config.k_x[1] ≈ 0
-    @test config.k_x[2] ≈ PI2 / L[1]
-    @test config.k_x[end] ≈ PI2 / L[1] * (M[1] ÷ 2)
+    @test config.k_x[2] ≈ 2π / L[1]
+    @test config.k_x[end] ≈ 2π / L[1] * (M[1] ÷ 2)
 
     @test config.k_y[1] ≈ 0
-    @test config.k_y[2] ≈ PI2 / L[2]
-    @test config.k_y[M[2] ÷ 2 + 1] ≈ PI2 / L[2] * (M[2] ÷ 2)
+    @test config.k_y[2] ≈ 2π / L[2]
+    @test config.k_y[M[2] ÷ 2 + 1] ≈ 2π / L[2] * (M[2] ÷ 2)
     # First negative wavenumber: index M_y/2 + 2 → physical n = -M_y/2 + 1
-    @test config.k_y[M[2] ÷ 2 + 2] ≈ PI2 / L[2] * (-(M[2] ÷ 2) + 1)
-    @test config.k_y[end] ≈ PI2 / L[2] * (-1)
+    @test config.k_y[M[2] ÷ 2 + 2] ≈ 2π / L[2] * (-(M[2] ÷ 2) + 1)
+    @test config.k_y[end] ≈ 2π / L[2] * (-1)
 
     @test config.k_z[1] ≈ 0
-    @test config.k_z[M[3] ÷ 2 + 1] ≈ PI2 / L[3] * (M[3] ÷ 2)
-    @test config.k_z[end] ≈ PI2 / L[3] * (-1)
+    @test config.k_z[M[3] ÷ 2 + 1] ≈ 2π / L[3] * (M[3] ÷ 2)
+    @test config.k_z[end] ≈ 2π / L[3] * (-1)
 end
 
 @testset "FFTW plans are cold-path fields ready for hot-path mul!" begin

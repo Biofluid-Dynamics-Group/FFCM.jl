@@ -3,7 +3,7 @@ module FFCM
 using StaticArrays: SVector
 using StructArrays: StructArray, components
 using FFTW: plan_rfft, plan_brfft
-import LinearAlgebra: mul!
+import LinearAlgebra: mul!, dot
 using SpecialFunctions: erf
 
 include("config.jl")

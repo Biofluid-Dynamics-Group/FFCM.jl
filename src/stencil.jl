@@ -113,6 +113,11 @@ function _fill_particle_stencil!(
     j2 = round(Int32, Y2 * inv_h)
     j3 = round(Int32, Y3 * inv_h)
 
+    # The nine scratch vectors are filled as separate per-axis scalars rather
+    # than a vectorial (homogeneous-tuple + `for i in 1:3`) form: this loop drives
+    # three `exp` calls per stencil point and is the kernel's cost-centre, so a
+    # vectorial rewrite is benchmark-gated and must keep `@ballocated == 0`/`@inferred`
+    # green before it lands.
     @inbounds for k in Int32(1):M_G
         offset = k - Int32(1) - half_M_G
         g1 = j1 + offset

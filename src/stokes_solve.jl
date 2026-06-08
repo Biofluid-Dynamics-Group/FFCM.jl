@@ -92,29 +92,31 @@ function _apply_inverse_stokes_kernel!(
     inv_M::T,
 ) where {T}
     inv_μ_M = inv_M / μ
-    zero_C = zero(Complex{T})
+    zero_velocity = zero(SVector{3, Complex{T}})
     @inbounds for iz in eachindex(k_z)
         kz = k_z[iz]
         for iy in eachindex(k_y)
             ky = k_y[iy]
             for ix in eachindex(k_x)
-                kx = k_x[ix]
-                k² = kx * kx + ky * ky + kz * kz
+                k = SVector(k_x[ix], ky, kz)
+                k² = dot(k, k)
                 if iszero(k²)
-                    fx̂[ix, iy, iz] = zero_C
-                    fŷ[ix, iy, iz] = zero_C
-                    fẑ[ix, iy, iz] = zero_C
+                    # Gauge-fix the k = 0 mode (periodic Stokes is undefined there).
+                    f̂ = zero_velocity
                 else
-                    fx̂_v = fx̂[ix, iy, iz]
-                    fŷ_v = fŷ[ix, iy, iz]
-                    fẑ_v = fẑ[ix, iy, iz]
+                    f̂ = SVector(fx̂[ix, iy, iz], fŷ[ix, iy, iz], fẑ[ix, iy, iz])
                     inv_k² = one(T) / k²
-                    α = inv_μ_M * inv_k²
-                    c = (kx * fx̂_v + ky * fŷ_v + kz * fẑ_v) * inv_k²
-                    fx̂[ix, iy, iz] = α * (fx̂_v - kx * c)
-                    fŷ[ix, iy, iz] = α * (fŷ_v - ky * c)
-                    fẑ[ix, iy, iz] = α * (fẑ_v - kz * c)
+                    # Project the force transverse to k and scale by the Stokeslet
+                    # 1/(μ k²): f̂ ← (1/(μ k²)) (I − k̂⊗k̂) f̂, with the unnormalised
+                    # FFTW round-trip's 1/M folded into inv_μ_M. `dot(k, k)` and
+                    # `dot(k, f̂)` are unrolled over the three axes (k is real, so
+                    # `dot` adds no conjugation), keeping the projection in the
+                    # vector form of paper §3 equations (32)–(33).
+                    f̂ = (inv_μ_M * inv_k²) * (f̂ - k * (dot(k, f̂) * inv_k²))
                 end
+                fx̂[ix, iy, iz] = f̂[1]
+                fŷ[ix, iy, iz] = f̂[2]
+                fẑ[ix, iy, iz] = f̂[3]
             end
         end
     end
