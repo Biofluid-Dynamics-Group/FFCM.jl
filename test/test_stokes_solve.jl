@@ -75,7 +75,6 @@ end
     @test length(config.k_y) == M[2]
     @test length(config.k_z) == M[3]
 
-    2π = 2π
     @test config.k_x[1] ≈ 0
     @test config.k_x[2] ≈ 2π / L[1]
     @test config.k_x[end] ≈ 2π / L[1] * (M[1] ÷ 2)
