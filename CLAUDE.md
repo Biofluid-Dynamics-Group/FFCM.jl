@@ -11,9 +11,9 @@ Stokes flow, following Su & Keaveny (2024), *J. Comput. Phys.* 510, 113060.
 
 FFCM is a
 particular approximation to the mobility operator $\mathcal{M}^{\mathcal{V}\mathcal{F}}$
-that maps a finite number of forces $\mathcal{F}$ localised at positions $\mathcal{Y}$ to
+that maps a finite number of forces $\mathcal{F}$ in spherical particles of radius $a$ localised at positions $\mathcal{Y}$ to
 their corresponding velocities $\mathcal{V}$ if they interact hydrodynamically via the
-Stokes equation. This can be the Stokes solution to a problem of colloidal suspension, or, equivalently, an immersed-boundary method where the distributional terms have been regularised using Gaussian kernels.
+Stokes equation. This can be the Stokes solution to a problem of colloidal suspension, or, equivalently, an immersed-boundary method where the distributional terms have been regularised using Gaussian kernels corresponding to the hydrodynamic radius.
 
 The package exposes a plug-and-play mobility operator
 
@@ -137,7 +137,7 @@ linear map, without a separate adapter at the call site.
   validated. The only universal CUDA rule is the boundary one (§7): CUDA
   appears in `ext/`, never in `src/`.
 - The benchmark suite in `benchmark/` is the regression detector. Run it
-  before claiming a perf improvement.
+  before claiming a performance improvement.
 - **Type stability is strict.** No abstract types in struct fields; no
   non-`const` globals captured by hot-path functions. Every public
   hot-path function must pass `Test.@inferred` in tests; whole-module

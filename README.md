@@ -73,4 +73,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## LLM assistance
 
-This repository was written with assistance of `claude-4.7-opus`, `claude-4.8-opus` and `claude-4.6-sonnet`. [CLAUDE.md](CLAUDE.md) serves as agentic guidance for this project.
+This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus` and `claude-4.6-sonnet`.
