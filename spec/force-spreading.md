@@ -21,7 +21,7 @@ where $\boldsymbol{Y}_n$ is the position of particle $n$.
 
 The idea behind this kernel is to use $\Sigma \geq \sigma$, i.e. spread the forces using a relatively large Gaussian kernel. That reduces the refinement requirements of the Stokes solver for accuracy, at the cost of an added error in hydrodynamic interactions that needs to be corrected. However, due to the exponential decay of Gaussians, this correction can be applied to a fraction of the total particle pairs while maintaining accuracy. $\Sigma = \sigma$ reduces to the standard FCM.
 
-Note that the Gaussian kernel in the original FCM is set to be $\sigma = \frac{a}{\sqrt{\pi}}$, so that FCM recovers the Stokes drag law for a single particle if its radius is $a$ (§2). Thus, $\sigma$ is set by the particle radius, and $\Sigma$ is variable to accelerate the method. For numerical reasons, it is reasonable to assume the particle radius $a$ as our length scale, so that all dimensions are expressed in terms of $a$.
+The Gaussian kernel width in the original FCM is $\sigma = \frac{a}{\sqrt{\pi}}$, chosen so that FCM recovers the Stokes drag law for a single particle of radius $a$ (§2). Thus, $\sigma$ is set by the particle radius, and $\Sigma$ is variable to accelerate the method. For numerical reasons, it is reasonable to assume the particle radius $a$ as our length scale, so that all dimensions are expressed in terms of $a$.
 
 Distinguishing the Laplacian $\Delta$ from the Gaussian kernel $\Delta_n$, a direct computation gives
 $$
@@ -89,8 +89,9 @@ At $\Sigma = \sigma$ the coefficients collapse to $a_0 = 1$, $a_2 = 0$, so $\til
 ### Cold-path input (user-supplied to `FFCMConfig`)
 
 - `a::T = T(1)` — particle radius. **Must equal `T(1)`** in the current
-  implementation; any other value is rejected with an `ArgumentError`. The
-  unit-radius convention is set by CLAUDE.md.
+  implementation; any other value is rejected with an `ArgumentError`. All
+  lengths are expressed in units of the particle radius (see the kernel
+  discussion above).
 - `Σ_over_σ::T` — required; the ratio $\frac{\Sigma}{\sigma}$ (paper §5). Must
   satisfy $\frac{\Sigma}{\sigma} \geq 1$. The equality case $\Sigma = \sigma$
   reduces to standard FCM; the strict inequality $\Sigma > \sigma$ is the regime

@@ -17,8 +17,8 @@ Solving for the Fourier transform of the velocity, one gets
 $$
   \hat{\boldsymbol{u}}(\boldsymbol{k}) = \frac{1}{\mu \lvert \boldsymbol{k} \rvert^2} \left(\boldsymbol{I} - \frac{\boldsymbol{k} \otimes \boldsymbol{k}}{\lvert \boldsymbol{k} \rvert^2}\right) \hat{\boldsymbol{f}}(\boldsymbol{k}) \text{,}
 $$
-for $\boldsymbol{k} \neq 0$ and $\hat{\boldsymbol{u}}(\boldsymbol{0}) = \boldsymbol{0}$. Note that
-$\boldsymbol{k}$ is the wavenumber vector as this is a 3D Fourier transform.
+for $\boldsymbol{k} \neq 0$ and $\hat{\boldsymbol{u}}(\boldsymbol{0}) = \boldsymbol{0}$, where
+$\boldsymbol{k}$ is the wavenumber vector of the 3D Fourier transform.
 
 The spectral method is then to apply the FFT to the spread forces sampled on the grid to obtain $\hat{\boldsymbol{f}}$, solve for $\hat{\boldsymbol{u}}$, and apply the inverse FFT to recover $\boldsymbol{u}$ sampled on the grid.
 
