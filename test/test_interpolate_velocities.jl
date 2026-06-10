@@ -5,12 +5,6 @@ using FFCM: spread_forces!, stokes_solve!, interpolate_velocities!,
 using StaticArrays
 using StructArrays: components
 
-# Tolerance convention (spec/interpolation.md): relative comparisons use
-# rtol = sqrt(eps(T)); the atol floor catches velocity components that gather
-# to ≈ 0, where a relative tolerance is ill-defined. atol ≈ rtol/100.
-_interp_atol(::Type{Float32}) = 1.0f-6
-_interp_atol(::Type{Float64}) = 1.0e-10
-
 @testset "Interpolation is the discrete adjoint of spreading (J = h³ Sᵀ)" begin
     # The mobility M^VF = J·L⁻¹·J† is positive-definite only because the
     # interpolation operator J is the exact discrete transpose of the
@@ -57,7 +51,7 @@ _interp_atol(::Type{Float64}) = 1.0e-10
         u_comp = (ux, uy, uz)
         f_comp = (fx, fy, fz)
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         for n in 1:N, c in 1:3
             fill!(config.F_sorted, zero(T))
             config.F_sorted[c, n] = one(T)
@@ -123,15 +117,13 @@ end
         deterministic_field!(ref.fluid_velocity)
         Vn = zeros(T, 3, 1)
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         for n in 1:N
             ref.Y_sorted[1, 1] = Y[1, n]
             ref.Y_sorted[2, 1] = Y[2, n]
             ref.Y_sorted[3, 1] = Y[3, n]
             interpolate_velocities!(Vn, ref)
-            @test V[1, n] ≈ Vn[1, 1] rtol = rtol atol = atol
-            @test V[2, n] ≈ Vn[2, 1] rtol = rtol atol = atol
-            @test V[3, n] ≈ Vn[3, 1] rtol = rtol atol = atol
+            @test isapprox(V[:, n], Vn[:, 1]; rtol = rtol, atol = atol)
         end
     end
 end
@@ -183,7 +175,7 @@ end
             )
         end
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         @test V[1, 1] ≈ ref[1] rtol = rtol atol = atol
         @test V[2, 1] ≈ ref[2] rtol = rtol atol = atol
         @test V[3, 1] ≈ ref[3] rtol = rtol atol = atol
@@ -229,12 +221,9 @@ end
         # sqrt(eps(T)) with the same (M_G = 16, Σ/h) regime, so the kernel
         # mass is 1 to that accuracy here too.
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
-        for n in 1:N
-            @test V[1, n] ≈ U[1] rtol = rtol atol = atol
-            @test V[2, n] ≈ U[2] rtol = rtol atol = atol
-            @test V[3, n] ≈ U[3] rtol = rtol atol = atol
-        end
+        atol = _near_zero_atol(T)
+        expected = T[U[i] for i in 1:3, _ in 1:N]
+        @test all(isapprox.(V, expected; rtol = rtol, atol = atol))
     end
 end
 
@@ -289,7 +278,7 @@ end
         Vc = zeros(T, 3, N); interpolate_velocities!(Vc, config)
 
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         @test all(isapprox(Vc[i], α * V1[i] + β * V2[i]; rtol = rtol, atol = atol)
                   for i in eachindex(Vc))
     end
@@ -335,7 +324,7 @@ end
         Vb = zeros(T, 3, 1); interpolate_velocities!(Vb, config)
 
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         @test Va[1, 1] ≈ Vb[1, 1] rtol = rtol atol = atol
         @test Va[2, 1] ≈ Vb[2, 1] rtol = rtol atol = atol
         @test Va[3, 1] ≈ Vb[3, 1] rtol = rtol atol = atol
@@ -387,7 +376,7 @@ end
             )
         end
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         @test V[1, 1] ≈ ref[1] rtol = rtol atol = atol
         @test V[2, 1] ≈ ref[2] rtol = rtol atol = atol
         @test V[3, 1] ≈ ref[3] rtol = rtol atol = atol
@@ -432,7 +421,7 @@ end
         MFb = apply_mobility(Fb)
 
         rtol = sqrt(eps(T))
-        atol = _interp_atol(T)
+        atol = _near_zero_atol(T)
         @test sum(Fa .* MFb) ≈ sum(Fb .* MFa) rtol = rtol atol = atol
     end
 end

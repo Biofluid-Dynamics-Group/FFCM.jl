@@ -1,4 +1,5 @@
 using Test
+using Random: Xoshiro
 using FFCM: _assign_cells_kernel!
 
 @testset "Hash for a position in the origin cell is zero" begin
@@ -54,7 +55,8 @@ end
     num_cells = (Int32(4), Int32(6), Int32(8))
     total = prod(Int(c) for c in num_cells)
     N = 1000
-    Y = [L[i] * rand() for i in 1:3, _ in 1:N]
+    rng = Xoshiro(2024)
+    Y = [L[i] * rand(rng) for i in 1:3, _ in 1:N]
     cell_hash = Vector{Int32}(undef, N)
     _assign_cells_kernel!(cell_hash, Y, inv_cell_size, num_cells)
     @test all(0 .≤ cell_hash .< total)

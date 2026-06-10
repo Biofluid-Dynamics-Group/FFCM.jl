@@ -32,15 +32,22 @@ using StructArrays: components
         Y_n = (T(2), T(2), T(2))
         F_n = (T(1), T(0), T(0))
         rtol = sqrt(eps(T))
-        @testset "grid point ($ix, $iy, $iz)" for iz in 1:M, iy in 1:M, ix in 1:M
+        expected = Array{SVector{3, T}}(undef, Int(M), Int(M), Int(M))
+        for iz in 1:M, iy in 1:M, ix in 1:M
             x_g = ((ix - 1) * h, (iy - 1) * h, (iz - 1) * h)
             r² = (x_g[1] - Y_n[1])^2 + (x_g[2] - Y_n[2])^2 + (x_g[3] - Y_n[3])^2
             Δ = (T(2) * T(π) * Σ^2)^(-T(3)/T(2)) * exp(-r²/(T(2) * Σ^2))
             laplacian = (r²/Σ^4 - T(3)/Σ^2) * Δ
             Δ̃ = Δ + (σ^2 - Σ^2)/T(2) * laplacian
-            expected = SVector{3, T}(F_n[1] * Δ̃, F_n[2] * Δ̃, F_n[3] * Δ̃)
-            @test config.force_density[ix, iy, iz] ≈ expected rtol=rtol
+            expected[ix, iy, iz] = SVector{3, T}(F_n[1] * Δ̃, F_n[2] * Δ̃, F_n[3] * Δ̃)
         end
+        # Element-wise relative comparison: both sides are independent
+        # evaluations of the same closed form, so relative agreement holds even
+        # at far-field grid points where the kernel is tiny.
+        @test all(
+            isapprox(config.force_density[I], expected[I]; rtol = rtol)
+            for I in CartesianIndices(expected)
+        )
     end
 end
 
@@ -131,9 +138,9 @@ end
         total_force = ntuple(i -> sum(@view config.F_sorted[i, :]), 3)
 
         # Tolerance follows the paper-tabulated error for the chosen
-        # (M_G, Σ/h). At Σ/h ≈ 9 with M_G = 12 the truncation error is
-        # well below `1e-6` in single precision and well below `1e-8` in
-        # double; we use `sqrt(eps(T))` as a single relaxed bound.
+        # (M_G, Σ/h). At Σ/h ≈ 1.13 with M_G = 16 the stencil radius is
+        # ≈ 7.1·Σ, so the truncation error sits well below `sqrt(eps(T))`
+        # in both precisions; we use it as a single relaxed bound.
         rtol = sqrt(eps(T))
         @test total_grid[1] ≈ total_force[1] rtol=rtol
         @test total_grid[2] ≈ total_force[2] rtol=rtol
@@ -342,11 +349,16 @@ end
         h = config.h
         fx = components(config.force_density)[1]
         rtol = sqrt(eps(T))
+        expected = Array{T}(undef, Int(M), Int(M), Int(M))
         for iz in 1:M, iy in 1:M, ix in 1:M
             x_g = ((ix - 1) * h, (iy - 1) * h, (iz - 1) * h)
             r² = (x_g[1] - Y_n[1])^2 + (x_g[2] - Y_n[2])^2 + (x_g[3] - Y_n[3])^2
-            Δ = (T(2) * T(π) * σ^2)^(-T(3)/T(2)) * exp(-r²/(T(2) * σ^2))
-            @test fx[ix, iy, iz] ≈ Δ rtol=rtol
+            expected[ix, iy, iz] =
+                (T(2) * T(π) * σ^2)^(-T(3)/T(2)) * exp(-r²/(T(2) * σ^2))
         end
+        @test all(
+            isapprox(fx[I], expected[I]; rtol = rtol)
+            for I in CartesianIndices(expected)
+        )
     end
 end

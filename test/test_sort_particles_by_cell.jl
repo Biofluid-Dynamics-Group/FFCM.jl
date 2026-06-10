@@ -1,4 +1,5 @@
 using Test
+using Random: Xoshiro
 using FFCM
 using FFCM: _build_cell_list_kernel!, _gather_particles_kernel!,
     sort_particles_by_cell!, wrap_positions!, assign_cells!
@@ -73,16 +74,15 @@ end
 @testset "Sorted positions and forces are the gather under the permutation" begin
     for T in (Float32, Float64)
         N = 6
-        Y = rand(T, 3, N)
-        F = rand(T, 3, N)
+        rng = Xoshiro(2024)
+        Y = rand(rng, T, 3, N)
+        F = rand(rng, T, 3, N)
         original_index = Int32[4, 1, 6, 2, 5, 3]
         Y_sorted = Matrix{T}(undef, 3, N)
         F_sorted = Matrix{T}(undef, 3, N)
         _gather_particles_kernel!(Y_sorted, F_sorted, Y, F, original_index)
-        for s in 1:N
-            @test Y_sorted[:, s] == Y[:, original_index[s]]
-            @test F_sorted[:, s] == F[:, original_index[s]]
-        end
+        @test Y_sorted == Y[:, original_index]
+        @test F_sorted == F[:, original_index]
     end
 end
 
@@ -93,8 +93,9 @@ end
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N, _fcm_grid_kwargs(L)...,
         )
-        Y = [config.L[i] * rand(T) for i in 1:3, _ in 1:N]
-        F = rand(T, 3, N)
+        rng = Xoshiro(2024)
+        Y = [config.L[i] * rand(rng, T) for i in 1:3, _ in 1:N]
+        F = rand(rng, T, 3, N)
         wrap_positions!(Y, config.L)
         assign_cells!(config, Y)
         sort_particles_by_cell!(config, Y, F)
@@ -103,17 +104,18 @@ end
         @test issorted(config.cell_hash[config.original_index])
         total = length(config.cell_start)
         covered = 0
+        membership_consistent = true
         for c in 0:(total - 1)
             for s in config.cell_start[c + 1]:config.cell_end[c + 1]
-                @test config.cell_hash[config.original_index[s]] == c
+                membership_consistent &=
+                    config.cell_hash[config.original_index[s]] == c
                 covered += 1
             end
         end
+        @test membership_consistent
         @test covered == N
         # The gathered data matches the permutation.
-        for s in 1:N
-            @test config.Y_sorted[:, s] == Y[:, config.original_index[s]]
-            @test config.F_sorted[:, s] == F[:, config.original_index[s]]
-        end
+        @test config.Y_sorted == Y[:, config.original_index]
+        @test config.F_sorted == F[:, config.original_index]
     end
 end

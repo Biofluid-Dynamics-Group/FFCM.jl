@@ -187,18 +187,21 @@ end
         )
 
         rtol = sqrt(eps(T))
-        for iz in eachindex(config.k_z),
-            iy in eachindex(config.k_y),
-            ix in eachindex(config.k_x)
-
+        divergence_free_at = function (ix, iy, iz)
             kx, ky, kz = config.k_x[ix], config.k_y[iy], config.k_z[iz]
             ûx_v = fx̂[ix, iy, iz]
             ûy_v = fŷ[ix, iy, iz]
             ûz_v = fẑ[ix, iy, iz]
             kdotû = kx * ûx_v + ky * ûy_v + kz * ûz_v
             norm_û = sqrt(abs2(ûx_v) + abs2(ûy_v) + abs2(ûz_v))
-            @test abs(kdotû) ≤ rtol * max(norm_û, one(T))
+            return abs(kdotû) ≤ rtol * max(norm_û, one(T))
         end
+        @test all(
+            divergence_free_at(ix, iy, iz)
+            for iz in eachindex(config.k_z),
+                iy in eachindex(config.k_y),
+                ix in eachindex(config.k_x)
+        )
     end
 end
 
@@ -233,13 +236,13 @@ end
 
         scale = one(T) / (config.μ * kx_mode * kx_mode)
         atol = sqrt(eps(T)) * scale
-        for iz in 1:M_z, iy in 1:M_y, ix in 1:M_x
-            x = T(ix - 1) * config.h
-            expected_y = scale * sin(kx_mode * x)
-            @test isapprox(ux[ix, iy, iz], zero(T); atol = atol)
-            @test isapprox(uy[ix, iy, iz], expected_y; atol = atol)
-            @test isapprox(uz[ix, iy, iz], zero(T); atol = atol)
-        end
+        expected_y = T[
+            scale * sin(kx_mode * T(ix - 1) * config.h)
+            for ix in 1:M_x, _ in 1:M_y, _ in 1:M_z
+        ]
+        @test all(abs.(ux) .≤ atol)
+        @test all(isapprox.(uy, expected_y; atol = atol))
+        @test all(abs.(uz) .≤ atol)
     end
 end
 
@@ -290,12 +293,12 @@ end
         end)
 
         rtol = sqrt(eps(T))
-        for comp in 1:3, i in eachindex(u1[comp])
-            @test isapprox(
-                u_combined[comp][i],
-                α * u1[comp][i] + β * u2[comp][i];
-                atol = rtol,
-                rtol = rtol,
+        for comp in 1:3
+            @test all(
+                isapprox.(
+                    u_combined[comp], α .* u1[comp] .+ β .* u2[comp];
+                    atol = rtol, rtol = rtol,
+                ),
             )
         end
     end
@@ -356,7 +359,7 @@ end
     # symmetric partner on the discrete grid, breaking exact reflection
     # equivariance of the projector at that single mode — a well-known
     # artefact of the r2c FFT layout, not a bug in the projector. The
-    # cycle-5 single-Fourier-mode test already exercises the projector
+    # single-Fourier-mode test above already exercises the projector
     # arithmetic at a non-Nyquist mode at the documented `sqrt(eps(T))`
     # tolerance.
     for T in (Float32, Float64)
@@ -395,16 +398,14 @@ end
         u_b = solve(reflected_fx, reflected_fy, reflected_fz)
 
         rtol = sqrt(eps(T))
-        for iz in 1:Mz, iy in 1:My, ix in 1:Mx
-            ix_r = refl_ix(ix, Mx)
-            @test isapprox(
-                u_b[1][ix, iy, iz], -u_a[1][ix_r, iy, iz]; atol = rtol, rtol = rtol,
-            )
-            @test isapprox(
-                u_b[2][ix, iy, iz], u_a[2][ix_r, iy, iz]; atol = rtol, rtol = rtol,
-            )
-            @test isapprox(
-                u_b[3][ix, iy, iz], u_a[3][ix_r, iy, iz]; atol = rtol, rtol = rtol,
+        expected = (
+            T[-u_a[1][refl_ix(ix, Mx), iy, iz] for ix in 1:Mx, iy in 1:My, iz in 1:Mz],
+            T[u_a[2][refl_ix(ix, Mx), iy, iz] for ix in 1:Mx, iy in 1:My, iz in 1:Mz],
+            T[u_a[3][refl_ix(ix, Mx), iy, iz] for ix in 1:Mx, iy in 1:My, iz in 1:Mz],
+        )
+        for comp in 1:3
+            @test all(
+                isapprox.(u_b[comp], expected[comp]; atol = rtol, rtol = rtol),
             )
         end
     end
@@ -437,10 +438,14 @@ end
         stokes_solve!(config_high)
 
         rtol = sqrt(eps(T))
-        for comp in 1:3, i in eachindex(components(config_low.fluid_velocity)[comp])
-            u_lo = components(config_low.fluid_velocity)[comp][i]
-            u_hi = components(config_high.fluid_velocity)[comp][i]
-            @test isapprox(T(2) * u_hi, u_lo; atol = rtol, rtol = rtol)
+        u_low = components(config_low.fluid_velocity)
+        u_high = components(config_high.fluid_velocity)
+        for comp in 1:3
+            @test all(
+                isapprox.(
+                    T(2) .* u_high[comp], u_low[comp]; atol = rtol, rtol = rtol,
+                ),
+            )
         end
     end
 end

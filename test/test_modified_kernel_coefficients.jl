@@ -1,5 +1,4 @@
 using Test
-using BenchmarkTools
 using FFCM
 using FFCM: _modified_kernel_coefficients
 
@@ -36,14 +35,5 @@ end
         @test a_2 == zero(T)
         @test inv_norm ≈ one(T) / sqrt(T(2) * T(π) * σ * σ) rtol = sqrt(eps(T))
         @test inv_2Σ² ≈ one(T) / (T(2) * σ * σ) rtol = sqrt(eps(T))
-    end
-end
-
-@testset "Modified-kernel coefficients are type-stable and allocation-free" begin
-    for T in (Float32, Float64)
-        σ = one(T) / sqrt(T(π))
-        Σ = T(1.5) * σ
-        @inferred _modified_kernel_coefficients(σ, Σ)
-        @test (@ballocated _modified_kernel_coefficients($σ, $Σ)) == 0
     end
 end

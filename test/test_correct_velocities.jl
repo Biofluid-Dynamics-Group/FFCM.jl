@@ -6,17 +6,6 @@ using StaticArrays: SVector, SMatrix
 using LinearAlgebra: I, norm, dot
 using SpecialFunctions: erf
 
-# Build a config whose grid parameters are irrelevant to the correction (it reads
-# only the cell list and kernel widths). R_c = 1, L = 8 ⇒ 8 cells/axis, cell_size 1.
-function _corr_config(::Type{T}; N, Σ_over_σ = T(2), μ = T(1), R_c = T(1)) where {T}
-    L = (T(8), T(8), T(8))
-    M = Int32(16)
-    return FFCMConfig{T}(;
-        L = L, R_c = R_c, N = N, Σ_over_σ = Σ_over_σ, μ = μ,
-        num_grid_points = (M, M, M), M_G = 8,
-    )
-end
-
 # Apply the step-6 correction operator to forces `F` at positions `Y`: runs the
 # step-1/2 cell-list build, then `correct_velocities!` on a zeroed `V`. Linear in F.
 function _apply_correction(config::FFCMConfig{T}, Y, F) where {T}
@@ -28,10 +17,6 @@ function _apply_correction(config::FFCMConfig{T}, Y, F) where {T}
     correct_velocities!(V, config)
     return V
 end
-
-# Near-zero / absolute tolerance for quantities that should vanish.
-_corr_atol(::Type{Float32}) = 1.0f-6
-_corr_atol(::Type{Float64}) = 1.0e-10
 
 # --- Independent oracle: the full FCM pairwise tensors (paper §2 equations
 # (8)–(10) and (16)–(17), §3 equation (30)), assembled as 3×3 matrices. The
@@ -90,11 +75,11 @@ end
         a = one(T)
         σ = a / sqrt(T(π))
         for μ in (T(0.5), T(1), T(2.7))
-            @test isapprox(_self_correction(σ, σ, a, μ), zero(T); atol = _corr_atol(T))
+            @test isapprox(_self_correction(σ, σ, a, μ), zero(T); atol = _near_zero_atol(T))
             for r in (T(0.2), T(0.75), T(1.5))
                 A, B = _correction_scalars(r, σ, σ, μ)
-                @test isapprox(A, zero(T); atol = _corr_atol(T))
-                @test isapprox(B, zero(T); atol = _corr_atol(T))
+                @test isapprox(A, zero(T); atol = _near_zero_atol(T))
+                @test isapprox(B, zero(T); atol = _near_zero_atol(T))
             end
         end
     end
@@ -120,7 +105,7 @@ end
                 A, B = _correction_scalars(r, σ, Σ, μ)
                 M_impl = A * SMatrix{3,3,T}(I) + B * (x * x')
                 M_oracle = _correction_tensor_oracle(x, σ, Σ, μ)
-                @test M_impl ≈ M_oracle rtol = sqrt(eps(T)) atol = _corr_atol(T)
+                @test M_impl ≈ M_oracle rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
             end
         end
     end
@@ -155,15 +140,15 @@ end
     # A particle with no neighbour within R_c receives only the diagonal self
     # correction: V[:, n] += self_correction_term · F_n.
     for T in (Float32, Float64)
-        config = _corr_config(T; N = 2)
+        config = _standard_test_config(T; N = 2)
         a, σ, Σ, μ = config.a, config.σ, config.Σ, config.μ
         c = _self_correction(σ, Σ, a, μ)
         # Two particles separated well beyond R_c = 1 (distance √27 ≈ 5.2).
         Y = T[1 4; 1 4; 1 4]
         F = T[0.3 -0.5; -0.7 0.9; 1.1 0.2]
         V = _apply_correction(config, Y, F)
-        @test V[:, 1] ≈ c .* F[:, 1] rtol = sqrt(eps(T)) atol = _corr_atol(T)
-        @test V[:, 2] ≈ c .* F[:, 2] rtol = sqrt(eps(T)) atol = _corr_atol(T)
+        @test V[:, 1] ≈ c .* F[:, 1] rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
+        @test V[:, 2] ≈ c .* F[:, 2] rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
     end
 end
 
@@ -171,7 +156,7 @@ end
     # Velocity of each particle = self term + (correction tensor)·(neighbour force).
     # The tensor is symmetric in x = Y_n − Y_m, so both partners share it.
     for T in (Float32, Float64)
-        config = _corr_config(T; N = 2)
+        config = _standard_test_config(T; N = 2)
         a, σ, Σ, μ = config.a, config.σ, config.Σ, config.μ
         c = _self_correction(σ, Σ, a, μ)
         Y = T[4 4.5; 4 4.2; 4 3.8]   # particle 1 = (4,4,4), particle 2 = (4.5,4.2,3.8)
@@ -182,8 +167,8 @@ end
         M = _correction_tensor_oracle(x, σ, Σ, μ)
         F1 = SVector{3,T}(F[1, 1], F[2, 1], F[3, 1])
         F2 = SVector{3,T}(F[1, 2], F[2, 2], F[3, 2])
-        @test V[:, 1] ≈ c .* F[:, 1] + M * F2 rtol = sqrt(eps(T)) atol = _corr_atol(T)
-        @test V[:, 2] ≈ c .* F[:, 2] + M * F1 rtol = sqrt(eps(T)) atol = _corr_atol(T)
+        @test V[:, 1] ≈ c .* F[:, 1] + M * F2 rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
+        @test V[:, 2] ≈ c .* F[:, 2] + M * F1 rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
     end
 end
 
@@ -191,7 +176,7 @@ end
     # Fₐᵀ (corr Fᵦ) = Fᵦᵀ (corr Fₐ): the correction operator is self-adjoint, so the
     # split mobility stays symmetric positive-definite (paper §3).
     for T in (Float32, Float64)
-        config = _corr_config(T; N = 5)
+        config = _standard_test_config(T; N = 5)
         Y = T[4.0 4.4 3.7 4.2 3.9;
               4.0 3.8 4.3 4.1 3.6;
               4.0 4.2 4.0 3.7 4.4]
@@ -209,7 +194,7 @@ end
 
 @testset "Correction is linear in F and invariant under translation/periodicity" begin
     for T in (Float32, Float64)
-        config = _corr_config(T; N = 4)
+        config = _standard_test_config(T; N = 4)
         Y = T[4.0 4.4 3.7 4.2;
               4.0 3.8 4.3 4.1;
               4.0 4.2 4.0 3.7]
@@ -223,26 +208,26 @@ end
         V_combined = _apply_correction(config, Y, α .* F1 .+ β .* F2)
         V_separate = α .* _apply_correction(config, Y, F1) .+
                      β .* _apply_correction(config, Y, F2)
-        @test V_combined ≈ V_separate rtol = sqrt(eps(T)) atol = _corr_atol(T)
+        @test V_combined ≈ V_separate rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
 
         # Rigid translation of every particle leaves relative separations (hence the
         # correction) unchanged, even though cell assignment changes.
         V_ref = _apply_correction(config, Y, F1)
         shift = T[1.3, -2.1, 0.7]
         V_shift = _apply_correction(config, Y .+ shift, F1)
-        @test V_shift ≈ V_ref rtol = sqrt(eps(T)) atol = _corr_atol(T)
+        @test V_shift ≈ V_ref rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
 
         # Periodic image: move one particle by L along x ⇒ identical after wrapping.
         Y_img = copy(Y)
         Y_img[1, 2] += config.L[1]
         V_img = _apply_correction(config, Y_img, F1)
-        @test V_img ≈ V_ref rtol = sqrt(eps(T)) atol = _corr_atol(T)
+        @test V_img ≈ V_ref rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
     end
 end
 
 @testset "Correction adds to V rather than overwriting it" begin
     for T in (Float32, Float64)
-        config = _corr_config(T; N = 2)
+        config = _standard_test_config(T; N = 2)
         Y = T[4 4.5; 4 4.2; 4 3.8]
         F = T[0.3 -0.5; -0.7 0.9; 1.1 0.2]
         V_only = _apply_correction(config, Y, F)
@@ -254,6 +239,6 @@ end
         V0 = T[2.0 -1.0; 0.5 3.0; -2.5 1.5]
         V = copy(V0)
         correct_velocities!(V, config)
-        @test V ≈ V0 .+ V_only rtol = sqrt(eps(T)) atol = _corr_atol(T)
+        @test V ≈ V0 .+ V_only rtol = sqrt(eps(T)) atol = _near_zero_atol(T)
     end
 end

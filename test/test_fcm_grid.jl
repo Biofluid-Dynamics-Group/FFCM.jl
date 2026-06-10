@@ -3,7 +3,7 @@ using FFCM
 using StructArrays
 using StaticArrays
 
-# Boilerplate inputs that satisfy every cycle-1 invariant unless a test
+# Boilerplate inputs that satisfy every constructor invariant unless a test
 # overrides one of them.
 const _DEFAULT_KWARGS = (;
     L = (4.0, 4.0, 4.0),

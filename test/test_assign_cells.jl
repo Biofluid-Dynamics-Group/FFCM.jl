@@ -1,4 +1,5 @@
 using Test
+using Random: Xoshiro
 using FFCM
 using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!
 
@@ -7,7 +8,8 @@ using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!
     config = FFCMConfig{Float64}(;
         L = L, R_c = 1.0, N = 64, _fcm_grid_kwargs(L)...,
     )
-    Y = [config.L[i] * rand() for i in 1:3, _ in 1:length(config.cell_hash)]
+    rng = Xoshiro(2024)
+    Y = [config.L[i] * rand(rng) for i in 1:3, _ in 1:length(config.cell_hash)]
     wrap_positions!(Y, config.L)
     Y_for_kernel = copy(Y)
     expected = Vector{Int32}(undef, length(config.cell_hash))
