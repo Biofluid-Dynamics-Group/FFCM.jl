@@ -36,7 +36,7 @@ R_c = T(1)  # Cutoff radius
 
 Y = T[9.3 4.1 -0.4 4.0; 4.0 4.2 4.0 9.9; 4.0 4.0 4.0 4.0]  # Positions 3xN
 F = T[0.5 -0.3 0.2 0.1; -0.1 0.4 0.0 0.3; 0.2 0.1 0.7 -0.5]  # Forces 3xN
-N = Y.shape[2]  # Number of particles
+N = size(Y, 2)  # Number of particles
 
 num_points = Int32(16)  # Grid discretisation
 M_G = 8  # Stencil size
@@ -60,7 +60,12 @@ V = M*F  # Alternatively, use the method as a linear operator (useful for iterat
 
 ## Parameter optimisation
 
+_Helpers to calibrate the method parameters (`Σ/σ`, `R_c`, the grid resolution)
+to target hardware are planned and not yet available._
+
 ## GPU acceleration
+
+_A CUDA backend is planned and not yet available._
 
 ## License
 
@@ -68,4 +73,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## LLM assistance
 
-This repository was written with assistance of `claude-4.7-opus` and `claude-4.6-sonnet`. [CLAUDE.md](CLAUDE.md) serves as agentic guidance for this project.
+This repository was written with assistance of `claude-4.7-opus`, `claude-4.8-opus` and `claude-4.6-sonnet`. [CLAUDE.md](CLAUDE.md) serves as agentic guidance for this project.
