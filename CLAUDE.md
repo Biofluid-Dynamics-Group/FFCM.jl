@@ -24,7 +24,7 @@ mobility!(V, config, Y, F)   # Y, F: 3×N arrays; particles have unit radius
 with two backends:
 
 - **CPU**: lives entirely in `src/`.
-- **CUDA (for NVIDIA GPUs)**: lives in `ext/cuFFCM/` and loads as a package
+- **CUDA (for NVIDIA GPUs)**: lives in `ext/CUDAExt/` and loads as a package
   extension only when the user has `CUDA.jl` in their environment.
 
 The intended downstream use is a direct or iterative resistance solver that applies
@@ -141,8 +141,7 @@ linear map, without a separate adapter at the call site.
 - **Type stability is strict.** No abstract types in struct fields; no
   non-`const` globals captured by hot-path functions. Every public
   hot-path function must pass `Test.@inferred` in tests; whole-module
-  dispatch and inference health is audited with **JET.jl** (a `test`
-  extra in `Project.toml`). Allocation count (§2 rule 4) and inference
+  dispatch and inference health is audited with **JET.jl** (a test dependency). Allocation count (§2 rule 4) and inference
   (this rule) are two separate guarantees — both must be pinned.
 - **Data layout.** Use `StructArrays.jl` for collections of physical
   entities — preserves per-particle readability (`particles[i]` returns
@@ -178,7 +177,7 @@ before the implementation biases it.
 - `cuda/` — CPU↔CUDA parity tests, only run when CUDA is loadable.
 
 `Aqua.jl` audits package hygiene; **JET.jl** audits dispatch and
-inference. Both are `test` extras in `Project.toml`.
+inference. Both are test dependencies.
 
 ## 6. What to mine from cuFCM
 

@@ -184,7 +184,7 @@ End-to-end correctness for this step is established by the test suite.
   `Float64`.
 - `test/test_assign_cells_allocations.jl` — `@ballocated == 0` for both passes and the
   kernel.
-- `test/test_aqua.jl` — `Aqua.test_all` (method ambiguity, stale deps/extras, project
+- `test/test_aqua.jl` — `Aqua.test_all` (method ambiguity, stale deps, project
   consistency).
 - `test/test_jet.jl` — `JET.@test_call` on each hot-path entry point for `Float32` and
   `Float64`, walking the full call graph.

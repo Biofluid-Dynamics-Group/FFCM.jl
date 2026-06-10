@@ -1,7 +1,10 @@
 name = "FFCM"
 uuid = "7a5e5976-cca4-4592-9cc6-b4f5aae2794e"
-authors = ["pzuritas <p.zurita23@imperial.ac.uk>"]
 version = "0.1.0"
+authors = ["Pablo Zurita Soler <p.zurita23@imperial.ac.uk>", "Hang Su <hang.su16@imperial.ac.uk>"]
+
+[workspace]
+projects = ["test"]
 
 [deps]
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
@@ -11,22 +14,9 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
-Aqua = "0.8.14"
-BenchmarkTools = "1.8.0"
 FFTW = "1.10.0"
-JET = "0.11.3"
 LinearAlgebra = "1.11.0"
 SpecialFunctions = "2.8.0"
 StaticArrays = "1.9.18"
 StructArrays = "0.7.3"
-Test = "1.11.0"
 julia = "1.11.5"
-
-[extras]
-Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Aqua", "BenchmarkTools", "JET", "Test"]
