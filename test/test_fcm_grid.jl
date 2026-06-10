@@ -21,7 +21,7 @@ const _DEFAULT_KWARGS = (;
 end
 
 @testset "Non-unit hydrodynamic radius is not yet supported" begin
-    @test_throws ErrorException FFCMConfig{Float64}(;
+    @test_throws ArgumentError FFCMConfig{Float64}(;
         _DEFAULT_KWARGS..., a = 0.5,
     )
 end
@@ -79,6 +79,26 @@ end
     @test config.M_G == Int32(2)
 end
 
+@testset "Kernel support M_G must not exceed the grid on any axis" begin
+    # A stencil wider than the box would wrap distinct stencil points onto the
+    # same grid point (mod M), breaking the spread @simd independence and
+    # double-weighting the interpolation adjoint. The default grid is 8³.
+    @test_throws ArgumentError FFCMConfig{Float64}(;
+        _DEFAULT_KWARGS..., M_G = 10,
+    )
+    # The smallest grid axis is the binding bound for an anisotropic grid.
+    @test_throws ArgumentError FFCMConfig{Float64}(;
+        _DEFAULT_KWARGS...,
+        L = (4.0, 8.0, 8.0),
+        num_grid_points = (Int32(8), Int32(16), Int32(16)),
+        M_G = 10,
+    )
+    # Equality M_G == min(num_grid_points) is admissible (one full period of
+    # distinct wrapped indices).
+    config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., M_G = 8)
+    @test config.M_G == Int32(8)
+end
+
 @testset "Per-axis grid dimension counts must each be at least one" begin
     @test_throws ArgumentError FFCMConfig{Float64}(;
         _DEFAULT_KWARGS...,
@@ -105,7 +125,13 @@ end
 end
 
 @testset "Per-particle stencil scratch vectors are sized to the kernel support M_G" begin
-    config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., M_G = 10)
+    # Grid bumped to 16³ so M_G = 10 stays within the per-axis grid bound; this
+    # test pins the scratch-vector sizing, which is independent of the grid.
+    config = FFCMConfig{Float64}(;
+        _DEFAULT_KWARGS...,
+        num_grid_points = (Int32(16), Int32(16), Int32(16)),
+        M_G = 10,
+    )
     @test length(config.gaussian_x) == 10
     @test length(config.gaussian_y) == 10
     @test length(config.gaussian_z) == 10

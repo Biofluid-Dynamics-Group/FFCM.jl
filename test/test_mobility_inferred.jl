@@ -23,5 +23,6 @@ using LinearAlgebra: mul!
         v = zeros(T, 3N)
         @inferred mul!(v, M, f)
         @inferred mul!(v, M, f, T(2), T(0.5))
+        @inferred M * F
     end
 end

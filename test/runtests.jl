@@ -7,10 +7,13 @@ using Test
 # the existing tests use.
 function _fcm_grid_kwargs(L::NTuple{3, T}) where {T}
     h_target = L[1] / 8
+    num_grid_points = ntuple(i -> Int32(round(Int, L[i] / h_target)), 3)
     return (
         Σ_over_σ = T(2),
-        num_grid_points = ntuple(i -> Int32(round(Int, L[i] / h_target)), 3),
-        M_G = 8,
+        num_grid_points = num_grid_points,
+        # The stencil cannot exceed the grid on any axis; clamp for thin domains
+        # where a short axis yields fewer than 8 grid points.
+        M_G = min(8, Int(minimum(num_grid_points))),
         μ = T(1),
     )
 end

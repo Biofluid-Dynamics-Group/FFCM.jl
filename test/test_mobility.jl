@@ -1,7 +1,7 @@
 using Test
 using FFCM
 using FFCM: mobility!, FFCMMobility
-using LinearAlgebra: mul!, dot
+using LinearAlgebra: mul!, dot, issymmetric, isposdef
 
 # Tolerance convention (spec/mobility.md, CLAUDE.md §2): relative comparisons use
 # rtol = sqrt(eps(T)); the atol floor catches components that come out ≈ 0, where
@@ -34,6 +34,27 @@ end
         mobility!(V, config, Y, F)
         @test Y == Y0
         @test F == F0
+    end
+end
+
+@testset "mobility! rejects mismatched V/Y/F sizes" begin
+    # The driver writes into config buffers sized for N under @inbounds; an
+    # argument that is not 3×N would read or write out of bounds, so the entry
+    # guards the shapes (spec/mobility.md).
+    for T in (Float32, Float64)
+        N = 4
+        config = _mobility_test_config(T, N)
+        Y = zeros(T, 3, N)
+        F = zeros(T, 3, N)
+        V = zeros(T, 3, N)
+        # Wrong particle count on each argument in turn.
+        @test_throws DimensionMismatch mobility!(zeros(T, 3, N + 1), config, Y, F)
+        @test_throws DimensionMismatch mobility!(V, config, zeros(T, 3, N + 1), F)
+        @test_throws DimensionMismatch mobility!(V, config, Y, zeros(T, 3, N + 1))
+        # Wrong leading dimension (not the three Cartesian axes).
+        @test_throws DimensionMismatch mobility!(zeros(T, 2, N), config, Y, F)
+        @test_throws DimensionMismatch mobility!(V, config, zeros(T, 2, N), F)
+        @test_throws DimensionMismatch mobility!(V, config, Y, zeros(T, 2, N))
     end
 end
 
@@ -155,5 +176,39 @@ end
         mul!(Mg, M, g)
         @test dot(g, Mf) ≈ dot(f, Mg) rtol = sqrt(eps(T))
         @test dot(f, Mf) > zero(T)
+    end
+end
+
+@testset "Out-of-place M*F is the mirror of mobility!" begin
+    # M*F maps forces in the natural 3×N layout to velocities, allocating a fresh
+    # output (spec/mobility.md). Mirrors mobility! exactly.
+    for T in (Float32, Float64)
+        N = 3
+        config = _mobility_test_config(T, N)
+        Y = T[3.5 4.6 2.0; 4.0 4.2 6.0; 4.0 4.0 4.0]
+        F = T[0.5 -0.3 0.2; -0.1 0.4 0.0; 0.2 0.1 0.7]
+        M = FFCMMobility(config, Y)
+        V_ref = zeros(T, 3, N)
+        mobility!(V_ref, config, Y, F)
+        V = M * F
+        @test V isa Matrix{T}
+        @test size(V) == (3, N)
+        @test isapprox(V, V_ref; rtol = sqrt(eps(T)), atol = _mobility_atol(T))
+        # A force matrix that is not 3×N is rejected, matching the hot-path guard.
+        @test_throws DimensionMismatch M * zeros(T, 3, N + 1)
+        @test_throws DimensionMismatch M * zeros(T, 2, N)
+    end
+end
+
+@testset "FFCMMobility declares itself symmetric positive-definite" begin
+    # The assembled operator is SPD by construction (spec/mobility.md); declaring
+    # the traits lets generic solvers (e.g. cg!) dispatch on them.
+    for T in (Float32, Float64)
+        N = 2
+        config = _mobility_test_config(T, N)
+        Y = T[3.8 4.5; 4.0 4.0; 4.0 4.0]
+        M = FFCMMobility(config, Y)
+        @test issymmetric(M)
+        @test isposdef(M)
     end
 end
