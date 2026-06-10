@@ -26,9 +26,9 @@ once per kernel invocation, before the per-particle loop.
 See `spec/force-spreading.md` and `spec/interpolation.md`.
 """
 function _modified_kernel_coefficients(σ::T, Σ::T) where {T}
-    Σ² = Σ * Σ
-    Σ⁴ = Σ² * Σ²
-    σ²_minus_Σ² = σ * σ - Σ²
+    Σ² = Σ^2
+    Σ⁴ = Σ²^2
+    σ²_minus_Σ² = σ^2 - Σ²
     a_0 = one(T) - T(3) * σ²_minus_Σ² / (T(2) * Σ²)
     a_2 = σ²_minus_Σ² / (T(2) * Σ⁴)
     inv_norm = one(T) / sqrt(T(2) * T(π) * Σ²)
@@ -114,10 +114,10 @@ function _fill_particle_stencil!(
     j3 = round(Int32, Y3 * inv_h)
 
     # The nine scratch vectors are filled as separate per-axis scalars rather
-    # than a vectorial (homogeneous-tuple + `for i in 1:3`) form: this loop drives
-    # three `exp` calls per stencil point and is the kernel's cost-centre, so a
-    # vectorial rewrite is benchmark-gated and must keep `@ballocated == 0`/`@inferred`
-    # green before it lands.
+    # than a vectorial (homogeneous-tuple + `for i in 1:3`) form: this loop
+    # drives three `exp` calls per stencil point and is the kernel's
+    # cost-centre. A vectorial rewrite is deferred until a benchmark shows it
+    # at least breaks even.
     @inbounds for k in Int32(1):M_G
         offset = k - Int32(1) - half_M_G
         g1 = j1 + offset
@@ -126,12 +126,12 @@ function _fill_particle_stencil!(
         x1 = T(g1) * h - Y1
         x2 = T(g2) * h - Y2
         x3 = T(g3) * h - Y3
-        gaussian_x[k] = inv_norm * exp(-x1 * x1 * inv_2Σ²)
-        gaussian_y[k] = inv_norm * exp(-x2 * x2 * inv_2Σ²)
-        gaussian_z[k] = inv_norm * exp(-x3 * x3 * inv_2Σ²)
-        r²_x[k] = x1 * x1
-        r²_y[k] = x2 * x2
-        r²_z[k] = x3 * x3
+        gaussian_x[k] = inv_norm * exp(-x1^2 * inv_2Σ²)
+        gaussian_y[k] = inv_norm * exp(-x2^2 * inv_2Σ²)
+        gaussian_z[k] = inv_norm * exp(-x3^2 * inv_2Σ²)
+        r²_x[k] = x1^2
+        r²_y[k] = x2^2
+        r²_z[k] = x3^2
         idx_x[k] = mod(g1, M_x) + Int32(1)
         idx_y[k] = mod(g2, M_y) + Int32(1)
         idx_z[k] = mod(g3, M_z) + Int32(1)

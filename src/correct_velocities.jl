@@ -23,13 +23,11 @@ allocation-free.
 See `spec/pairwise-correction.md`.
 """
 function _self_correction(σ::T, Σ::T, a::T, μ::T) where {T}
-    σ² = σ * σ
-    Σ² = Σ * Σ
-    σ²_minus_Σ² = σ² - Σ²
+    σ²_minus_Σ² = σ^2 - Σ^2
     Σπ = Σ * sqrt(T(π))
     return one(T) / (T(6) * T(π) * μ * a) - one(T) / (T(6) * T(π) * μ * Σπ) +
            σ²_minus_Σ² / (T(12) * μ * Σπ^3) -
-           σ²_minus_Σ² * σ²_minus_Σ² / (T(32) * μ * Σ²^2 * Σ * T(π)^(T(3) / 2))
+           σ²_minus_Σ²^2 / (T(32) * μ * Σ^5 * sqrt(T(π)^3))
 end
 
 """
@@ -65,16 +63,16 @@ separate `_self_correction`.
 See `spec/pairwise-correction.md`.
 """
 function _correction_scalars(r::T, σ::T, Σ::T, μ::T) where {T}
-    r² = r * r
-    r³ = r² * r
-    r⁴ = r² * r²
+    r² = r^2
+    r³ = r^3
+    r⁴ = r²^2
     r⁵ = r⁴ * r
-    σ² = σ * σ
-    σ⁴ = σ² * σ²
-    Σ² = Σ * Σ
-    Σ⁴ = Σ² * Σ²
+    σ² = σ^2
+    σ⁴ = σ²^2
+    Σ² = Σ^2
+    Σ⁴ = Σ²^2
     σ²_minus_Σ² = σ² - Σ²
-    σ²_minus_Σ²_sq_quarter = σ²_minus_Σ² * σ²_minus_Σ² / T(4)
+    σ²_minus_Σ²_sq_quarter = σ²_minus_Σ²^2 / T(4)
     fourπμ = T(4) * T(π) * μ
     eightπμ = T(8) * T(π) * μ
 
@@ -229,7 +227,7 @@ function _correct_velocities_kernel!(
     R_c::T,
 ) where {T}
     self_correction_term = _self_correction(σ, Σ, a, μ)
-    R_c² = R_c * R_c
+    R_c² = R_c^2
     m_x, m_y, m_z = num_cells
 
     @inbounds for cz in Int32(0):(m_z - Int32(1))
@@ -253,14 +251,14 @@ function _correct_velocities_kernel!(
                                         Y_sorted[1, s2], Y_sorted[2, s2], Y_sorted[3, s2],
                                     )
                                     x = _min_image(Yn - Ym, L)
-                                    r² = x[1] * x[1] + x[2] * x[2] + x[3] * x[3]
+                                    r² = dot(x, x)
                                     r² < R_c² || continue
                                     isotropic_coefficient, parallel_coefficient =
                                         _correction_scalars(sqrt(r²), σ, Σ, μ)
                                     Fm = SVector{3, T}(
                                         F_sorted[1, s2], F_sorted[2, s2], F_sorted[3, s2],
                                     )
-                                    xdotF = x[1] * Fm[1] + x[2] * Fm[2] + x[3] * Fm[3]
+                                    xdotF = dot(x, Fm)
                                     v +=
                                         isotropic_coefficient * Fm +
                                         (parallel_coefficient * xdotF) * x

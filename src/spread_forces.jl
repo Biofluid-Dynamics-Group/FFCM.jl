@@ -126,7 +126,7 @@ function _spread_forces_kernel!(
             inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
         )
 
-        @inbounds for kz in Int32(1):M_G
+        for kz in Int32(1):M_G
             iz = idx_z[kz]
             gz = gaussian_z[kz]
             r²z = r²_z[kz]
@@ -137,10 +137,8 @@ function _spread_forces_kernel!(
                 # The three force components are accumulated into separate SoA
                 # arrays (fx/fy/fz), not an SVector per grid point: this lets
                 # `@simd` vectorise the inner kx sweep and keeps the kernel
-                # allocation-free. A more vectorial form
-                # is deferred: the risk is the `@simd` independence, so it is
-                # benchmark-gated and must keep
-                # `@ballocated == 0`/`@inferred` green before it replaces this.
+                # allocation-free. A vectorial form would risk the `@simd`
+                # independence, so it is deferred pending a benchmark.
                 @simd for kx in Int32(1):M_G
                     ix = idx_x[kx]
                     w = (a_0 + a_2 * (r²_x[kx] + r²_yz)) * gaussian_x[kx] * gaussian_yz

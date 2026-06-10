@@ -121,7 +121,7 @@ function _interpolate_velocities_kernel!(
     ux, uy, uz = components(fluid_velocity)
 
     a_0, a_2, inv_norm, inv_2Σ² = _modified_kernel_coefficients(σ, Σ)
-    h³ = h * h * h
+    h³ = h^3
 
     half_M_G = M_G ÷ Int32(2)
 
@@ -134,16 +134,14 @@ function _interpolate_velocities_kernel!(
             inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
         )
 
-        # Gather into three scalar accumulators (vx/vy/vz), not an SVector, and
-        # store the result with the explicit per-component writes below. This
-        # keeps the kernel allocation-free and the accumulators register-resident.
-        # A more vectorial form is deferred: it is
-        # benchmark-gated and must keep
-        # `@ballocated == 0`/`@inferred` green before it replaces this.
+        # Gather into three scalar accumulators (vx/vy/vz), not an SVector,
+        # and store the result with the explicit per-component writes below.
+        # This keeps the kernel allocation-free and the accumulators
+        # register-resident. A vectorial form is deferred pending a benchmark.
         vx = zero(T)
         vy = zero(T)
         vz = zero(T)
-        @inbounds for kz in Int32(1):M_G
+        for kz in Int32(1):M_G
             iz = idx_z[kz]
             gz = gaussian_z[kz]
             r²z = r²_z[kz]
