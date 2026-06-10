@@ -4,8 +4,7 @@
 using FFCM
 
 # Absolute tolerance for quantities that should be ≈ 0, where a relative
-# tolerance is ill-defined (CLAUDE.md §2 rule 5): atol ≈ rtol/100 with
-# rtol = sqrt(eps(T)).
+# tolerance is ill-defined: atol ≈ rtol/100 with rtol = sqrt(eps(T)).
 _near_zero_atol(::Type{Float32}) = 1.0f-6
 _near_zero_atol(::Type{Float64}) = 1.0e-10
 

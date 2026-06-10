@@ -25,7 +25,7 @@ else.
 non-zero reference. Quantities that should be `≈ 0` use the **absolute**
 floor `_near_zero_atol(T)` (`1e-10` for `Float64`, `1e-6` for `Float32`).
 Truncation-dominated tests (grid-resolution limited, not round-off limited)
-document their own physical tolerance inline. See CLAUDE.md §2 rule 5.
+document their own physical tolerance inline.
 
 ## What each file pins
 
@@ -45,8 +45,8 @@ document their own physical tolerance inline. See CLAUDE.md §2 rule 5.
 | `test_mobility.jl` | Driver contracts: caller arrays untouched, `DimensionMismatch` guards, linearity, SPD, `mul!` (3- and 5-arg), `M * F`, `issymmetric`/`isposdef` | Operator identities; spec/mobility.md |
 | `test_mobility_properties.jl` | Linearity, symmetry, positivity across seeded-random domains, grids, widths, and out-of-domain positions | Exact operator identities, reproducible RNG |
 | `test_single_sphere_mobility.jl` | **Headline**: end-to-end self-mobility against the reciprocal-lattice regularised-Stokeslet sum; Σ-independence of the assembled operator | Paper §3 eqs. (32)–(33) lattice sum (`Float64` only: the bound is grid-truncation, which `Float32` round-off would mask) |
-| `test_*_api.jl` (×7) | `@inferred` + zero allocations for each step entry point and the assembled operator | CLAUDE.md §2 rule 4, §4 |
-| `test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | CLAUDE.md §3 deep-module contract |
+| `test_*_api.jl` (×7) | `@inferred` + zero allocations for each step entry point and the assembled operator | Hot-path contract tables in each `spec/*.md` |
+| `test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | `spec/mobility.md` two-phase public surface |
 | `test_aqua.jl` | Package hygiene | Aqua.jl (below) |
 | `test_jet.jl` | Whole-call-graph inference and dispatch health | JET.jl (below) |
 
@@ -70,7 +70,7 @@ call) cannot do.
 ambiguities, type piracy, unbound type parameters, undocumented exports, and
 `persistent_tasks`.
 
-## Known gaps (deliberate, tracked in PLAN.md)
+## Known gaps (deliberate, deferred)
 
 - No anisotropic-`L` accuracy test through the assembled operator (the
   property tests vary the grid but keep `h` isotropic, as the paper assumes).

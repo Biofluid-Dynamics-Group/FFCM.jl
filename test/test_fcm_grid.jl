@@ -15,7 +15,7 @@ const _DEFAULT_KWARGS = (;
     μ = 1.0,
 )
 
-@testset "Hydrodynamic radius defaults to one (CLAUDE.md unit-radius contract)" begin
+@testset "Hydrodynamic radius defaults to one (unit-radius convention)" begin
     config = FFCMConfig{Float64}(; _DEFAULT_KWARGS...)
     @test config.a == 1.0
 end
