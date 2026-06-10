@@ -21,6 +21,9 @@ and the real-space correction); the cell list is rebuilt every call.
 # Returns
 - `V`: the same matrix, holding the induced velocities.
 
+# Throws
+- `DimensionMismatch`: if `V`, `Y`, or `F` is not `3×N` for the `config`'s `N`.
+
 See `spec/mobility.md`.
 """
 function mobility!(
@@ -29,6 +32,12 @@ function mobility!(
     Y::AbstractMatrix{T},
     F::AbstractMatrix{T},
 ) where {T}
+    N = size(config.Y_sorted, 2)
+    (size(V) == (3, N) && size(Y) == (3, N) && size(F) == (3, N)) ||
+        throw(DimensionMismatch(
+            "V, Y, and F must each be 3×N for the config's N = $(N); got " *
+            "size(V) = $(size(V)), size(Y) = $(size(Y)), size(F) = $(size(F))",
+        ))
     wrap_positions!(config.Y_wrapped, Y, config.L)
     assign_cells!(config, config.Y_wrapped)
     sort_particles_by_cell!(config, config.Y_wrapped, F)
@@ -45,7 +54,15 @@ end
 Matrix-free `LinearAlgebra` operator backing the mobility action of `mobility!`
 for a fixed position matrix `Y` and a `config`. It implements `size`, `eltype`,
 and the three- and five-argument `mul!`, so it drops straight into
-`IterativeSolvers.gmres!`, `KrylovKit.linsolve`, or any `mul!`-based solver.
+`IterativeSolvers.gmres!`, `KrylovKit.linsolve`, or any `mul!`-based solver. It
+also declares `issymmetric` and `isposdef` (both `true`; the operator is SPD by
+construction — see below), so an `IterativeSolvers.cg!` resistance solve
+dispatches on them.
+
+For convenience, `M * F` applies the operator out of place to a force matrix `F`
+in the natural `3×N` layout, returning a fresh `3×N` velocity matrix (the mirror
+of `mobility!`). This is distinct from the `3N×3N` flat-vector view reported by
+`size(M)` and applied by `mul!`.
 
 The operator works on the column-major flat-vector view of the `3×N`
 force/velocity matrices: a length-`3N` vector with entry `3(n-1)+i` holding axis
@@ -128,3 +145,21 @@ function mul!(
     end
     return v
 end
+
+# Out-of-place application: `M * F` maps the forces `F` in the package's natural
+# `3×N` layout to the velocities they induce, mirroring `mobility!` but allocating
+# a fresh `3×N` result (out-of-place, so off the hot path). The `3×N` shape is
+# enforced by `mobility!`'s entry guard, which throws `DimensionMismatch` if `F`
+# does not match the config's `N`. Note this is the domain convenience for the
+# `3×N` force layout, distinct from the `3N×3N` flat-vector view reported by
+# `size(M)` and applied by `mul!` (see spec/mobility.md).
+function Base.:*(M::FFCMMobility{T}, F::AbstractMatrix{T}) where {T}
+    N = size(M.Y, 2)
+    return mobility!(Matrix{T}(undef, 3, N), M.config, M.Y, F)
+end
+
+# The assembled mobility is symmetric positive-definite by construction (see the
+# `FFCMMobility` docstring and spec/mobility.md): declaring the traits lets
+# generic solvers such as `IterativeSolvers.cg!` dispatch on them.
+issymmetric(::FFCMMobility) = true
+isposdef(::FFCMMobility) = true

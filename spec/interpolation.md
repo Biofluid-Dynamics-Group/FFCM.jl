@@ -125,7 +125,10 @@ scratch is safe.
 
 Identical to the spread: positions enter folded into $[0, L_i)$; each particle's stencil is
 wrapped $\bmod\ M_i$; a particle near the edge gathers from a stencil that wraps to the
-opposite side.
+opposite side. The cold-path precondition $M_G \leq \min(M_x, M_y, M_z)$ (validated in the
+constructor; see [force-spreading.md](force-spreading.md)) guarantees the wrapped stencil
+indices are distinct on each axis, so the quadrature gathers each grid point at most once —
+a stencil wider than the grid would double-weight a grid point in this adjoint of the spread.
 
 ### Boundary cases
 

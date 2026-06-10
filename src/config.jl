@@ -27,7 +27,9 @@ fixed at construction — changing `N` requires a new `FFCMConfig`.
   `(M_x, M_y, M_z)` (paper §3). The induced spacing `h = L_i / M_i` must be
   identical across axes (paper §3 isotropy assumption).
 - `M_G::Integer`: the cubic stencil support per axis (paper §5). Stored as
-  `Int32`; must be at least 2.
+  `Int32`; must satisfy `2 ≤ M_G ≤ min(num_grid_points)` — the stencil cannot be
+  wider than the grid on any axis, or the periodic wrap would alias distinct
+  stencil points onto the same grid point.
 - `μ::T`: the fluid dynamic viscosity (paper §2, Stokes momentum balance). Must
   be positive.
 
@@ -36,9 +38,9 @@ fixed at construction — changing `N` requires a new `FFCMConfig`.
 
 # Throws
 - `ArgumentError`: if `R_c ≤ 0`, any `L_i ≤ 0`, `R_c > min(L)/2`, `N ≤ 0`,
-  `Σ_over_σ < 1`, `M_G < 2`, any `num_grid_points` component `< 1`, the grid
+  `a ≠ T(1)` (non-unit radius not yet implemented), `Σ_over_σ < 1`, `M_G < 2`,
+  `M_G > min(num_grid_points)`, any `num_grid_points` component `< 1`, the grid
   spacing is anisotropic, or `μ ≤ 0`.
-- `ErrorException`: if `a ≠ T(1)` (non-unit radius not yet implemented).
 
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`,
 `spec/force-spreading.md`.
@@ -128,7 +130,10 @@ function FFCMConfig{T}(;
         "got R_c = $(R_c), min(L)/2 = $(minimum(L) / T(2))",
     ))
     N > 0 || throw(ArgumentError("N must be positive"))
-    a == T(1) || error("non-unit particle radius not yet implemented")
+    a == T(1) || throw(ArgumentError(
+        "non-unit particle radius not yet implemented; only a = 1 is " *
+        "supported, got a = $(a)",
+    ))
     Σ_over_σ ≥ T(1) || throw(ArgumentError(
         "Σ/σ must be at least 1 (paper §3 equation (22) requires Σ ≥ σ; the " *
         "equality case is the standard-FCM degenerate limit); got Σ/σ = $(Σ_over_σ)",
@@ -136,6 +141,13 @@ function FFCMConfig{T}(;
     M_G ≥ 2 || throw(ArgumentError("M_G must be at least 2; got $(M_G)"))
     all(≥(Int32(1)), num_grid_points) ||
         throw(ArgumentError("num_grid_points components must each be ≥ 1"))
+    M_G ≤ minimum(num_grid_points) || throw(ArgumentError(
+        "M_G must not exceed the grid on any axis (paper §3/§5; a stencil wider " *
+        "than the box would alias distinct stencil points onto the same grid " *
+        "point under the periodic wrap, breaking the spread @simd independence " *
+        "and double-weighting the interpolation adjoint); got M_G = $(M_G), " *
+        "min(num_grid_points) = $(minimum(num_grid_points))",
+    ))
     μ > zero(T) || throw(ArgumentError(
         "μ must be positive (paper §2 Stokes momentum balance requires a " *
         "positive viscosity); got μ = $(μ)",

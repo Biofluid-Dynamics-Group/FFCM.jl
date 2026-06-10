@@ -71,6 +71,10 @@ is the natural `reshape`, so a velocity vector may equivalently be viewed as
 
 - `Y`, `F`, `V` are caller-owned $3 \times N$ matrices (column $n$ is particle $n$, row $i$
   is axis $i$).
+- The entry guards that `V`, `Y`, and `F` are each $3 \times N$ for the `config`'s $N$,
+  throwing `DimensionMismatch` otherwise — the kernels write the $N$-sized `config` buffers
+  under `@inbounds`, so a mismatched argument would be out of bounds. The cheap tuple-size
+  check keeps the happy path allocation-free.
 - Reads `Y` and `F`; writes `V` in the caller's **original** particle order; returns `V`.
 - Does **not** mutate `Y` or `F`: positions are folded into $[0, L_i)$ in the `config`-owned
   buffer `Y_wrapped`, never in the caller's array, so an operator that closes over a fixed
@@ -88,6 +92,14 @@ A thin operator closing over `config` and a fixed position matrix `Y`, implement
   the result into `v`. Allocation-free.
 - `mul!(v, M, f, α, β)` — the five-argument form `v .= α·(M·f) + β·v`; the $\beta = 0$ case
   overwrites `v` (its prior, possibly uninitialised, contents are ignored).
+- `M * F` — out-of-place convenience applying the operator to a force matrix `F` in the
+  natural $3 \times N$ layout, returning a fresh $3 \times N$ velocity matrix (the mirror of
+  `mobility!`; it allocates, so it is not a hot path). This is distinct from the $3N \times 3N$
+  flat-vector view reported by `size(M)` and applied by `mul!`; the $3 \times N$ shape is
+  enforced by `mobility!`'s entry guard (`DimensionMismatch` on a mismatch).
+- `issymmetric(M)` and `isposdef(M)` both return `true`: the assembled operator is SPD by
+  construction (see "Symmetric positive-definiteness" above), so a `cg!` resistance solve can
+  dispatch on the declared traits.
 - The constructor validates `size(Y, 1) == 3` and that `Y`'s particle count matches the one
   `config` was built for.
 

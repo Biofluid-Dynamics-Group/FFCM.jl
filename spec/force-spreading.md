@@ -89,9 +89,8 @@ At $\Sigma = \sigma$ the coefficients collapse to $a_0 = 1$, $a_2 = 0$, so $\til
 ### Cold-path input (user-supplied to `FFCMConfig`)
 
 - `a::T = T(1)` — particle radius. **Must equal `T(1)`** in the current
-  implementation; any other value is rejected (⚑ currently raised via
-  `error(...)`; should become an `ArgumentError`). The unit-radius convention is
-  set by CLAUDE.md.
+  implementation; any other value is rejected with an `ArgumentError`. The
+  unit-radius convention is set by CLAUDE.md.
 - `Σ_over_σ::T` — required; the ratio $\frac{\Sigma}{\sigma}$ (paper §5). Must
   satisfy $\frac{\Sigma}{\sigma} \geq 1$. The equality case $\Sigma = \sigma$
   reduces to standard FCM; the strict inequality $\Sigma > \sigma$ is the regime
@@ -120,11 +119,12 @@ The cold-path inputs from steps 1–2 (`L`, `R_c`, `N`) are unchanged.
 | `idx_x`, `idx_y`, `idx_z` | `Vector{Int32}` | Length $M_G$; per-particle 1-based periodic-wrapped stencil indices. |
 
 Cold-path validation (constructor): `a == T(1)`; $\frac{\Sigma}{\sigma} \geq 1$;
-$M_G \geq 2$; all `num_grid_points[i] ≥ 1`; isotropic spacing
+$M_G \geq 2$; all `num_grid_points[i] ≥ 1`; $M_G \leq \min(M_x, M_y, M_z)$;
+isotropic spacing
 $\frac{L_x}{M_x} = \frac{L_y}{M_y} = \frac{L_z}{M_z}$ within $\sqrt{\mathrm{eps}(T)}$
-relative tolerance. ⚑ The precondition $M_G \leq \min(M_x, M_y, M_z)$ is not yet
-validated; it is what makes the inner-loop `@simd` argument (Performance notes)
-correct.
+relative tolerance. The $M_G \leq \min(M_x, M_y, M_z)$ bound is what makes the
+inner-loop `@simd` argument (Performance notes) correct: a stencil wider than the
+grid on some axis would wrap distinct stencil points onto the same grid point.
 
 ### Hot-path input (per `mobility!` call, populated by steps 1–2)
 
@@ -219,8 +219,9 @@ allocating and writes plain arrays; downstream consumers (steps 4–5) read
   weights.
 - **Inner-loop `@simd`, serial particle loop.** The innermost $k_x$ loop carries
   `@simd`: within one particle's stencil the wrapped indices $\bmod\ M_x$ are
-  distinct, so the writes do not alias — provided $M_G \leq M_x$ (⚑ not yet
-  validated; see the precondition note in Contract). The outer particle loop is
+  distinct, so the writes do not alias — guaranteed by the cold-path precondition
+  $M_G \leq \min(M_x, M_y, M_z)$ (see the validation note in Contract). The outer
+  particle loop is
   `@inbounds` only: two different particles can write the same grid point, so it
   is neither vectorised nor threaded in the MVP. The sorted-by-cell order from
   step 2 gives spatial locality on consecutive particles' stencil writes.
