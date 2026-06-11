@@ -1,51 +1,49 @@
 """
-    FFCMConfig{T}(; L, R_c, N, a = T(1), Σ_over_σ, num_grid_points, M_G, μ) -> FFCMConfig{T}
+    FFCMConfig{T}(
+        ; L, R_c, N, a = T(1), kernel_widths_ratio, num_grid_points, M_G, viscosity
+    ) -> FFCMConfig{T}
 
-Cold-path configuration of the Fast FCM mobility operator. Owns the cell
-geometry derived from the periodic domain `L = (L_x, L_y, L_z)` (paper §4) and
-the cutoff `R_c` for the pairwise correction, plus the FCM grid parameters
-(paper §3 and §5) and the hot-path buffers sized for `N` particles. The
-configuration is built once and reused across many `mobility!` calls; all
-per-call work writes into pre-allocated buffers owned by this struct. `N` is
-fixed at construction — changing `N` requires a new `FFCMConfig`.
+Configuration of the Fast FCM mobility operator: the cell partition of the pairwise
+correction (paper §4), the FCM grid parameters (paper §3 and §5), and the per-call buffers
+sized for `N` particles. Built once and reused across `mobility!` calls, which write into
+the buffers this struct owns. `N` is fixed at construction — changing `N` requires a new
+`FFCMConfig`.
 
 # Keywords
-- `L::NTuple{3, T}`: the triply-periodic box lengths `(L_x, L_y, L_z)`
-  (paper §4). Each component must be positive.
-- `R_c::T`: the real-space cutoff of the pairwise correction. Must satisfy
-  `0 < R_c ≤ min(L)/2`, so the minimum image is unambiguous and no particle is
-  corrected against its own periodic image (paper §4).
-- `N::Integer`: the number of particles; fixes the hot-path buffer sizes. Must
-  be positive.
-- `a::T = T(1)`: the particle hydrodynamic radius. Only `a == T(1)` is
-  currently supported; the kernel width follows `σ = a/√π` (paper §2, the FCM
-  radius–width relation that recovers the single-particle Stokes drag).
-- `Σ_over_σ::T`: the modified-kernel resolution ratio `Σ/σ` (paper §5). Must
-  satisfy `Σ_over_σ ≥ T(1)`; the equality `Σ = σ` is the standard-FCM
-  degenerate limit.
-- `num_grid_points::NTuple{3, Int32}`: the FFT grid dimensions
-  `(M_x, M_y, M_z)` (paper §3). The induced spacing `h = L_i / M_i` must be
-  identical across axes (paper §3 isotropy assumption).
-- `M_G::Integer`: the cubic stencil support per axis (paper §5). Stored as
-  `Int32`; must satisfy `2 ≤ M_G ≤ min(num_grid_points)` — the stencil cannot be
-  wider than the grid on any axis, or the periodic wrap would alias distinct
-  stencil points onto the same grid point.
-- `μ::T`: the fluid dynamic viscosity (paper §2, Stokes momentum balance). Must
-  be positive.
+- `L::NTuple{3, T}`: the domain lengths `(L_x, L_y, L_z)` (paper §4). Each component must be
+  positive.
+- `R_c::T`: the cutoff radius of the pairwise correction. Must satisfy
+  `0 < R_c ≤ min(L)/2`, so the minimum image is unambiguous and no particle is corrected
+  against its own periodic image (paper §4).
+- `N::Integer`: the number of particles; fixes the hot-path buffer sizes. Must be positive.
+- `a::T = T(1)`: the particle hydrodynamic radius. Only `a == T(1)` is currently supported;
+  the kernel width follows `σ = a/√π` (paper §2, the FCM radius-width relation that recovers
+  the single-particle Stokes drag).
+- `kernel_widths_ratio::T`: the ratio between the wider Gaussian kernel width and the
+  standard FCM kernel width (paper §5). Must satisfy `kernel_widths_ratio ≥ T(1)`; ratio of
+  1 is the standard FCM limit.
+- `num_grid_points::NTuple{3, Int32}`: the FFT grid dimensions `(M_x, M_y, M_z)` (paper §3).
+  The induced spacing `h = L_i / M_i` must be identical across axes (paper §3 assumption).
+- `M_G::Integer`: the cubic stencil support per axis (paper §5). Stored as `Int32`; must
+  satisfy `2 ≤ M_G ≤ min(num_grid_points)` — the stencil cannot be wider than the grid on
+  any axis, or the periodic wrap would alias distinct stencil points onto the same grid
+  point.
+- `viscosity::T`: the fluid dynamic viscosity (paper §2, Stokes momentum balance). Must be
+  positive.
 
 # Returns
-- `FFCMConfig{T}`: the compiled configuration, ready to pass to `mobility!`.
+- `FFCMConfig{T}`: the configuration `mobility!` operates on.
 
 # Throws
-- `ArgumentError`: if `R_c ≤ 0`, any `L_i ≤ 0`, `R_c > min(L)/2`, `N ≤ 0`,
-  `a ≠ T(1)` (non-unit radius not yet implemented), `Σ_over_σ < 1`, `M_G < 2`,
-  `M_G > min(num_grid_points)`, any `num_grid_points` component `< 1`, the grid
-  spacing is anisotropic, or `μ ≤ 0`.
+- `ArgumentError`: if `R_c ≤ 0`, any `L_i ≤ 0`, `R_c > min(L)/2`, `N ≤ 0`, `a ≠ T(1)`
+  (non-unit radius not yet implemented), `kernel_widths_ratio < 1`, `M_G < 2`,
+  `M_G > min(num_grid_points)`, any `num_grid_points` component `< 1`, the grid spacing is
+  anisotropic, or `viscosity ≤ 0`.
 
-See `spec/spatial-hashing.md`, `spec/particle-sorting.md`,
-`spec/force-spreading.md`.
+See `spec/spatial-hashing.md`, `spec/particle-sorting.md`, `spec/force-spreading.md`, and
+`spec/stokes-solve.md`.
 """
-struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdTransform, BwdTransform}
+struct FFCMConfig{T <: AbstractFloat, GridField, SpectralField, FwdTransform, InvTransform}
     L::NTuple{3, T}
     R_c::T
     num_cells::NTuple{3, Int32}
@@ -55,7 +53,7 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdTransform, BwdTransform}
     original_index::Vector{Int32}
     cell_start::Vector{Int32}
     cell_end::Vector{Int32}
-    next_free_slot::Vector{Int32}
+    counting_sort_scratch::Vector{Int32}
     Y_sorted::Matrix{T}
     F_sorted::Matrix{T}
     Y_wrapped::Matrix{T}
@@ -66,7 +64,7 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdTransform, BwdTransform}
     M_G::Int32
     h::T
     inv_h::T
-    force_density::FG
+    force_density::GridField
     gaussian_x::Vector{T}
     gaussian_y::Vector{T}
     gaussian_z::Vector{T}
@@ -77,25 +75,23 @@ struct FFCMConfig{T <: AbstractFloat, FG, FH, FwdTransform, BwdTransform}
     idx_y::Vector{Int32}
     idx_z::Vector{Int32}
     μ::T
-    fluid_velocity::FG
-    fluid_hat::FH
+    fluid_velocity::GridField
+    fluid_hat::SpectralField
     k_x::Vector{T}
     k_y::Vector{T}
     k_z::Vector{T}
     forward_fourier_transform::FwdTransform
-    inverse_fourier_transform::BwdTransform
+    inverse_fourier_transform::InvTransform
 end
 
 """
     _wrap_wavevectors(M, L) -> Vector{T}
 
-Per-axis Fourier wavevectors `k = 2π m / L` for a full (non-r2c) transform axis
-of length `M`, in FFTW's wrap-around order: the signed mode index is `m = j − 1`
-on the leading non-negative half (`j ≤ M÷2 + 1`) and `m = j − 1 − M` on the
-trailing negative half. Used for the `y` and `z` axes of the Stokes-solve grid
-(the `x` axis keeps only the non-negative half under the r2c transform and is
-built inline). Centralising the wrap-around convention keeps the FFTW layout in
-one place rather than copied per axis.
+Returns the per-axis Fourier wavevectors `k = 2π m / L` for a full transform axis of length
+`M`, in FFTW's wrap-around order: the signed mode index is `m = j - 1` on the leading
+non-negative half (`j ≤ M/2 + 1`) and `m = j - 1 - M` on the trailing negative half. Used
+for the `y` and `z` axes of the Stokes-solve grid; the `x` axis keeps only the non-negative
+half under the transform and is built inline.
 
 # Arguments
 - `M::Int32`: the number of grid points along the axis.
@@ -117,16 +113,15 @@ function FFCMConfig{T}(;
     R_c::T,
     N::Integer,
     a::T = T(1),
-    Σ_over_σ::T,
+    kernel_widths_ratio::T,
     num_grid_points::NTuple{3, Int32},
     M_G::Integer,
-    μ::T,
+    viscosity::T,
 ) where {T <: AbstractFloat}
     R_c > zero(T) || throw(ArgumentError("R_c must be positive"))
     all(>(zero(T)), L) || throw(ArgumentError("L components must be positive"))
     R_c ≤ minimum(L) / T(2) || throw(ArgumentError(
-        "R_c must be at most half the smallest box length (paper §4 requires " *
-        "the minimum image to be unambiguous, with no self-image corrections); " *
+        "R_c must be at most half the smallest box length;" *
         "got R_c = $(R_c), min(L)/2 = $(minimum(L) / T(2))",
     ))
     N > 0 || throw(ArgumentError("N must be positive"))
@@ -134,23 +129,18 @@ function FFCMConfig{T}(;
         "non-unit particle radius not yet implemented; only a = 1 is " *
         "supported, got a = $(a)",
     ))
-    Σ_over_σ ≥ T(1) || throw(ArgumentError(
-        "Σ/σ must be at least 1 (paper §3 equation (22) requires Σ ≥ σ; the " *
-        "equality case is the standard-FCM degenerate limit); got Σ/σ = $(Σ_over_σ)",
+    kernel_widths_ratio ≥ T(1) || throw(ArgumentError(
+        "kernel widths ratio must be at least 1; got $(kernel_widths_ratio)",
     ))
     M_G ≥ 2 || throw(ArgumentError("M_G must be at least 2; got $(M_G)"))
     all(≥(Int32(1)), num_grid_points) ||
         throw(ArgumentError("num_grid_points components must each be ≥ 1"))
     M_G ≤ minimum(num_grid_points) || throw(ArgumentError(
-        "M_G must not exceed the grid on any axis (paper §3/§5; a stencil wider " *
-        "than the box would alias distinct stencil points onto the same grid " *
-        "point under the periodic wrap, breaking the spread @simd independence " *
-        "and double-weighting the interpolation adjoint); got M_G = $(M_G), " *
+        "M_G must not exceed the grid on any axis; got M_G = $(M_G), " *
         "min(num_grid_points) = $(minimum(num_grid_points))",
     ))
-    μ > zero(T) || throw(ArgumentError(
-        "μ must be positive (paper §2 Stokes momentum balance requires a " *
-        "positive viscosity); got μ = $(μ)",
+    viscosity > zero(T) || throw(ArgumentError(
+        "viscosity must be positive; got $(viscosity)",
     ))
 
     num_cells = ntuple(i -> max(floor(Int32, L[i] / R_c), Int32(3)), 3)
@@ -161,7 +151,7 @@ function FFCMConfig{T}(;
     original_index = Vector{Int32}(undef, N)
     cell_start = Vector{Int32}(undef, num_cells_total)
     cell_end = Vector{Int32}(undef, num_cells_total)
-    next_free_slot = Vector{Int32}(undef, num_cells_total)
+    counting_sort_scratch = Vector{Int32}(undef, num_cells_total)
     Y_sorted = Matrix{T}(undef, 3, N)
     F_sorted = Matrix{T}(undef, 3, N)
     # Scratch the assembled `mobility!` driver folds the caller's positions into,
@@ -169,7 +159,7 @@ function FFCMConfig{T}(;
     Y_wrapped = Matrix{T}(undef, 3, N)
 
     σ = a / sqrt(T(π))
-    Σ = Σ_over_σ * σ
+    Σ = kernel_widths_ratio * σ
 
     h_per_axis = ntuple(i -> L[i] / num_grid_points[i], 3)
     rel_tol = sqrt(eps(T))
@@ -210,7 +200,7 @@ function FFCMConfig{T}(;
     fh_z = zeros(Complex{T}, fft_M_x, M_y, M_z)
     fluid_hat = StructArray{SVector{3, Complex{T}}}((fh_x, fh_y, fh_z))
 
-    # Fourier wavevectors in FFTW's layout. The r2c transform keeps only the
+    # Fourier wavevectors in FFTW's layout. The transform keeps only the
     # non-negative x-frequencies (indices `1:fft_M_x = M_x÷2 + 1`); the full y/z
     # axes use the wrap-around order built by `_wrap_wavevectors`.
     k_x = T[T(2) * T(π) * (i - 1) / L[1] for i in 1:fft_M_x]
@@ -236,7 +226,7 @@ function FFCMConfig{T}(;
         original_index,
         cell_start,
         cell_end,
-        next_free_slot,
+        counting_sort_scratch,
         Y_sorted,
         F_sorted,
         Y_wrapped,
@@ -257,7 +247,7 @@ function FFCMConfig{T}(;
         idx_x,
         idx_y,
         idx_z,
-        μ,
+        viscosity,
         fluid_velocity,
         fluid_hat,
         k_x,

@@ -23,7 +23,7 @@ end
 
 @testset "mobility! rejects mismatched V/Y/F sizes" begin
     # The driver writes into config buffers sized for N under @inbounds; an
-    # argument that is not 3×N would read or write out of bounds, so the entry
+    # argument that is not 3xN would read or write out of bounds, so the entry
     # guards the shapes (spec/mobility.md).
     for T in (Float32, Float64)
         N = 4
@@ -43,7 +43,7 @@ end
 end
 
 @testset "mobility! is linear in the forces" begin
-    # M^VF is a linear operator: M(aF + bG) = a·MF + b·MG.
+    # M^VF is a linear operator: M(aF + bG) = a⋅MF + b⋅MG.
     for T in (Float32, Float64)
         N = 3
         config = _standard_test_config(T; N = N)
@@ -66,7 +66,7 @@ end
 end
 
 @testset "Assembled mobility is symmetric positive-definite" begin
-    # M^VF = J·L⁻¹·J† + (M − M̃) is SPD: interpolation is the discrete adjoint of
+    # M^VF = J⋅L⁻¹⋅J† + (M − M̃) is SPD: interpolation is the discrete adjoint of
     # spreading, the Stokes solve is self-adjoint, and the correction is a
     # symmetric pair tensor (spec/mobility.md). Two particles 0.7 apart fall
     # within R_c = 1, so the off-diagonal pair coupling is exercised.
@@ -106,18 +106,18 @@ end
         config = _standard_test_config(T; N = N)
         Y = T[3.5 4.6 2.0; 4.0 4.2 6.0; 4.0 4.0 4.0]
         F = T[0.5 -0.3 0.2; -0.1 0.4 0.0; 0.2 0.1 0.7]
-        V_mat = zeros(T, 3, N)
-        mobility!(V_mat, config, Y, F)
+        V_matrix = zeros(T, 3, N)
+        mobility!(V_matrix, config, Y, F)
         M = FFCMMobility(config, Y)
         v = zeros(T, 3N)
         mul!(v, M, vec(F))
         @test isapprox(
-            v, vec(V_mat); rtol = sqrt(eps(T)), atol = _near_zero_atol(T),
+            v, vec(V_matrix); rtol = sqrt(eps(T)), atol = _near_zero_atol(T),
         )
     end
 end
 
-@testset "Five-argument mul! computes α·M·f + β·v" begin
+@testset "Five-argument mul! computes α⋅M⋅f + β⋅v" begin
     for T in (Float32, Float64)
         N = 3
         config = _standard_test_config(T; N = N)
@@ -126,7 +126,7 @@ end
         M = FFCMMobility(config, Y)
         f = vec(F)
         ref = zeros(T, 3N)
-        mul!(ref, M, f)                       # ref = M·f
+        mul!(ref, M, f)                       # ref = M⋅f
         α = T(2)
         β = T(-0.5)
         v0 = T[T(0.1) * k for k in 1:(3N)]
@@ -164,7 +164,7 @@ end
 end
 
 @testset "Out-of-place M*F is the mirror of mobility!" begin
-    # M*F maps forces in the natural 3×N layout to velocities, allocating a fresh
+    # M*F maps forces in the natural 3xN layout to velocities, allocating a fresh
     # output (spec/mobility.md). Mirrors mobility! exactly.
     for T in (Float32, Float64)
         N = 3
@@ -178,7 +178,7 @@ end
         @test V isa Matrix{T}
         @test size(V) == (3, N)
         @test isapprox(V, V_ref; rtol = sqrt(eps(T)), atol = _near_zero_atol(T))
-        # A force matrix that is not 3×N is rejected, matching the hot-path guard.
+        # A force matrix that is not 3xN is rejected, matching the hot-path guard.
         @test_throws DimensionMismatch M * zeros(T, 3, N + 1)
         @test_throws DimensionMismatch M * zeros(T, 2, N)
     end

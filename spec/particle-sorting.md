@@ -48,7 +48,7 @@ Sizes use `N` and the total cell count $m_x m_y m_z$.
 - `cell_start`, `cell_end` (`Vector{Int32}`, length $m_x m_y m_z$) — the per-cell
   **1-based inclusive** range into the sorted order. Cell $c \in 0{:}m_x m_y m_z - 1$
   occupies sorted slots `cell_start[c+1] : cell_end[c+1]`.
-- `next_free_slot` (`Vector{Int32}`, length $m_x m_y m_z$) — scratch for the counting sort
+- `counting_sort_scratch` (`Vector{Int32}`, length $m_x m_y m_z$) — scratch for the counting sort
   (the histogram, then the scatter cursor). Not read by other steps.
 - `Y_sorted`, `F_sorted` (`Matrix{T}`, shape `(3, N)`) — positions and forces gathered
   into the sorted order.
@@ -81,8 +81,8 @@ dense suspension.
 function-barrier kernels that take naked buffers, so each is independently testable and
 fully specialised:
 
-- `_build_cell_list_kernel!(original_index, cell_start, cell_end, next_free_slot, cell_hash)`
-  is the counting sort of Method: histogram into `next_free_slot`, exclusive prefix sum into
+- `_build_cell_list_kernel!(original_index, cell_start, cell_end, counting_sort_scratch, cell_hash)`
+  is the counting sort of Method: histogram into `counting_sort_scratch`, exclusive prefix sum into
   `cell_start`/`cell_end`, then the stable scatter into `original_index`.
 - `_gather_particles_kernel!(Y_sorted, F_sorted, Y, F, original_index)` performs
   $\boldsymbol{Y}^{\text{sorted}}_s = \boldsymbol{Y}_{\text{original\_index}[s]}$ and the
@@ -93,7 +93,7 @@ The five cell-list buffers and the two sorted matrices are allocated once by the
 
 | Phase | Allocations | Functions |
 |---|---|---|
-| Cold | OK | `FFCMConfig` constructor allocates `original_index`, `cell_start`, `cell_end`, `next_free_slot`, `Y_sorted`, `F_sorted`. |
+| Cold | OK | `FFCMConfig` constructor allocates `original_index`, `cell_start`, `cell_end`, `counting_sort_scratch`, `Y_sorted`, `F_sorted`. |
 | Hot  | `@ballocated == 0` | `sort_particles_by_cell!(config, Y, F)` (after `wrap_positions!` + `assign_cells!`). |
 
 The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
@@ -102,7 +102,7 @@ The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
 
 - The counting sort is $\mathcal{O}(N + m_x m_y m_z)$ and yields the cell ranges directly
   from its prefix sum, with no separate boundary scan.
-- The histogram and scatter loops carry a dependency (random writes into `next_free_slot` /
+- The histogram and scatter loops carry a dependency (random writes into `counting_sort_scratch` /
   `original_index`), so they are `@inbounds` but not `@simd`. The prefix-sum loop is a
   serial scan by construction.
 - The bounds are safe: `cell_hash[n]` lies in $0{:}m_x m_y m_z - 1$ by step 1, and the
@@ -153,7 +153,7 @@ The cuFCM reference (`cuFCM/src/CUFCM_CELLLIST.cu`: `sort_index_by_key`,
 | Index base / end semantics | 0-based; `cell_end` exclusive | 1-based; `cell_end` inclusive |
 | Empty cells | left undefined (relies on dense packing) | well-defined empty range `cell_end = cell_start − 1` |
 | Permutation direction | `index`: sorted → original | `original_index`: same |
-| Temp storage | `key_buf`, `index_buf`, temp storage malloc'd per call | pre-allocated `next_free_slot` on `config`; allocation-free |
+| Temp storage | `key_buf`, `index_buf`, temp storage malloc'd per call | pre-allocated `counting_sort_scratch` on `config`; allocation-free |
 | Stability | radix sort is stable | scatter in ascending $n$ is stable |
 | Data reorder | gathers position/force (and more) via `index` | gathers `Y`/`F` into `Y_sorted`/`F_sorted` |
 | Neighbour-cell map | `bulkmap_loop` precomputes neighbour indices | out of scope here — that is step 6 (pairwise correction) |

@@ -207,9 +207,9 @@ audited against this design.
 | Cell-count derivation | `max(L_i/R_c, 3)` then cast to int | `max(floor(Int32, L_i/R_c), 3)` (equivalent for positive arguments) |
 | Anisotropy | supported via grid dims | supported via `L::NTuple{3, T}` |
 | Hash index type | `int` (32-bit) | `Int32` |
-| Memory layout | AoS `Y[3·np + k]` | column-major `Matrix{T}(3, N)` (identical access pattern) |
+| Memory layout | AoS `Y[3⋅np + k]` | column-major `Matrix{T}(3, N)` (identical access pattern) |
 | Position wrap | a separate kernel mutates `Y` in place | `wrap_positions!` (in-place form mutates `Y`; out-of-place form writes a scratch buffer) |
-| Upper-edge roundoff | `if (x == boxsize) x = 0` inside `images()` | cell-index clamp `min(·, m_i − 1)` inside the kernel |
+| Upper-edge roundoff | `if (x == boxsize) x = 0` inside `images()` | cell-index clamp `min(⋅, m_i − 1)` inside the kernel |
 | Function-pointer indirection (`linear_encode`/`icell`) | yes | dropped — unnecessary here |
 
 The single behavioural difference is the location of the upper-edge roundoff fix: cuFCM

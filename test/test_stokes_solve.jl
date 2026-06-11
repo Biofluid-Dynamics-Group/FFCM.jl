@@ -11,10 +11,10 @@ const _STOKES_KWARGS = (;
     L = (4.0, 4.0, 4.0),
     R_c = 1.0,
     N = 1,
-    Σ_over_σ = 2.0,
+    kernel_widths_ratio = 2.0,
     num_grid_points = (Int32(8), Int32(8), Int32(8)),
     M_G = 8,
-    μ = 1.0,
+    viscosity = 1.0,
 )
 
 @testset "Viscosity μ is a required, positive cold-path parameter (paper §2)" begin
@@ -23,11 +23,11 @@ const _STOKES_KWARGS = (;
     # parameter is mandatory because viscosity is dimensionally meaningful
     # and a wrong default would silently scale every velocity in the
     # downstream mobility application.
-    config = FFCMConfig{Float64}(; _STOKES_KWARGS..., μ = 2.5)
+    config = FFCMConfig{Float64}(; _STOKES_KWARGS..., viscosity = 2.5)
     @test config.μ == 2.5
 
-    @test_throws ArgumentError FFCMConfig{Float64}(; _STOKES_KWARGS..., μ = 0.0)
-    @test_throws ArgumentError FFCMConfig{Float64}(; _STOKES_KWARGS..., μ = -1.0)
+    @test_throws ArgumentError FFCMConfig{Float64}(; _STOKES_KWARGS..., viscosity = 0.0)
+    @test_throws ArgumentError FFCMConfig{Float64}(; _STOKES_KWARGS..., viscosity = -1.0)
 end
 
 @testset "Velocity grid mirrors the force grid: SoA StructArray of shape (M_x, M_y, M_z)" begin
@@ -64,8 +64,8 @@ end
 end
 
 @testset "Precomputed wavenumbers follow the FFTW r2c / wrap-around layout" begin
-    # k_x covers the non-negative r2c half-axis (0, 2π/L_x, 2·2π/L_x, …,
-    # (M_x/2)·2π/L_x). k_y and k_z cover the full FFTW wrap-around order:
+    # k_x covers the non-negative r2c half-axis (0, 2π/L_x, 2⋅2π/L_x, …,
+    # (M_x/2)⋅2π/L_x). k_y and k_z cover the full FFTW wrap-around order:
     # 0, 1, 2, …, M_i/2, then negative -M_i/2+1, …, -1, all scaled by
     # 2π/L_i.
     M = (Int32(8), Int32(12), Int32(16))
@@ -106,10 +106,10 @@ end
         L = (4.0f0, 4.0f0, 4.0f0),
         R_c = 1.0f0,
         N = 1,
-        Σ_over_σ = 2.0f0,
+        kernel_widths_ratio = 2.0f0,
         num_grid_points = (Int32(8), Int32(8), Int32(8)),
         M_G = 8,
-        μ = 1.5f0,
+        viscosity = 1.5f0,
     )
     @test config.μ == 1.5f0
     @test eltype(config.fluid_velocity) == SVector{3, Float32}
@@ -127,9 +127,9 @@ end
     for T in (Float32, Float64)
         config = FFCMConfig{T}(;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
-            M_G = 8, μ = T(1),
+            M_G = 8, viscosity = T(1),
         )
         fx, fy, fz = components(config.force_density)
         # Deterministic non-mean-zero force field.
@@ -147,23 +147,23 @@ end
     end
 end
 
-@testset "Velocity field is discretely divergence-free (k · û = 0 per Fourier mode)" begin
-    # Incompressibility ∇·u = 0 in the continuous problem maps in Fourier
-    # space to k · û(k) = 0 at every wavenumber. The projector
+@testset "Velocity field is discretely divergence-free (k ⋅ û = 0 per Fourier mode)" begin
+    # Incompressibility ∇⋅u = 0 in the continuous problem maps in Fourier
+    # space to k ⋅ û(k) = 0 at every wavenumber. The projector
     # (I − k̂k̂ᵀ)/(μ k²) enforces this identity exactly per mode. We
     # inspect the Fourier-space velocity straight out of
     # `_apply_inverse_stokes_kernel!` (the projector's output) — the c2r
     # backward FFT step inside `stokes_solve!` destroys this buffer in
     # place, so we cannot read it after a full `stokes_solve!` call.
-    # Asserting |k · û_mod| ≤ sqrt(eps(T)) · max(‖û_mod‖, 1) per mode; the
+    # Asserting |k ⋅ û_mod| ≤ sqrt(eps(T)) ⋅ max(‖û_mod‖, 1) per mode; the
     # lower clamp prevents over-tightening at modes where ‖û_mod‖ itself
     # is O(eps(T)).
     for T in (Float32, Float64)
         config = FFCMConfig{T}(;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
-            M_G = 8, μ = T(1),
+            M_G = 8, viscosity = T(1),
         )
         fx, fy, fz = components(config.force_density)
         for iz in axes(fx, 3), iy in axes(fx, 2), ix in axes(fx, 1)
@@ -207,7 +207,7 @@ end
 
 @testset "Single Fourier mode along x with y-forcing matches the analytical projection" begin
     # f(x) = sin(2π m x / L_x) ê_y for integer m ∈ (0, M_x/2). Since k is
-    # along ê_x and f is along ê_y, k · f = 0 — the projector acts as the
+    # along ê_x and f is along ê_y, k ⋅ f = 0 — the projector acts as the
     # identity on the forcing, and û(k) = f̂(k) / (μ k²) at the two
     # conjugate-symmetric nonzero modes, zero elsewhere. Inverting back
     # to real space gives u_y(x) = (1 / (μ k_x²)) sin(2π m x / L_x).
@@ -218,9 +218,9 @@ end
         M_x, M_y, M_z = 8, 8, 8
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(M_x), Int32(M_y), Int32(M_z)),
-            M_G = 8, μ = T(1.5),
+            M_G = 8, viscosity = T(1.5),
         )
         m = 1
         kx_mode = T(2) * T(π) * T(m) / L[1]
@@ -253,9 +253,9 @@ end
     for T in (Float32, Float64)
         config = FFCMConfig{T}(;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
-            M_G = 8, μ = T(1),
+            M_G = 8, viscosity = T(1),
         )
         α, β = T(1.7), -T(2.3)
 
@@ -312,9 +312,9 @@ end
     for T in (Float32, Float64)
         config = FFCMConfig{T}(;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
-            M_G = 8, μ = T(1),
+            M_G = 8, viscosity = T(1),
         )
 
         function solve_with_force(base_force)
@@ -349,7 +349,7 @@ end
 
 @testset "Stokes solve is equivariant under axis-aligned reflections" begin
     # A reflection R_x along the x-axis maps a vector field
-    # `v(x, y, z)` to the field `R_x[v](x, y, z) = D_x · v(R_x · (x, y, z))`
+    # `v(x, y, z)` to the field `R_x[v](x, y, z) = D_x ⋅ v(R_x ⋅ (x, y, z))`
     # where D_x = diag(-1, 1, 1) flips the x-component. The Stokes
     # equations are reflection-equivariant, so L^{-1}[R_x f] = R_x L^{-1} f.
     # Discretely, indices map under reflection as i ↦ mod1(M_i - i + 2, M_i).
@@ -366,9 +366,9 @@ end
         Mx, My, Mz = 7, 7, 7
         config = FFCMConfig{T}(;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(Mx), Int32(My), Int32(Mz)),
-            M_G = 4, μ = T(1),
+            M_G = 4, viscosity = T(1),
         )
 
         base_fx = T[sin(T(ix) + T(iy) * T(0.4)) for ix in 1:Mx, iy in 1:My, iz in 1:Mz]
@@ -419,12 +419,12 @@ end
     for T in (Float32, Float64)
         common_kwargs = (;
             L = (T(4), T(4), T(4)), R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8,
         )
-        config_low = FFCMConfig{T}(; common_kwargs..., μ = T(1))
-        config_high = FFCMConfig{T}(; common_kwargs..., μ = T(2))
+        config_low = FFCMConfig{T}(; common_kwargs..., viscosity = T(1))
+        config_high = FFCMConfig{T}(; common_kwargs..., viscosity = T(2))
 
         force_y = T[sin(T(ix) * T(0.3) + T(iy) * T(0.2) + T(iz) * T(0.1))
                     for ix in 1:8, iy in 1:8, iz in 1:8]
@@ -455,7 +455,7 @@ end
     # particle in the standard-FCM degenerate limit (Σ/σ = 1). With one
     # particle at the box centre and unit x-force, the resulting velocity
     # field is the periodised regularised Stokeslet
-    # `S(x_g - Y; σ√2) · ê_x` (paper §3 equations (32)–(33)). For a relaxed
+    # `S(x_g - Y; σ√2) ⋅ ê_x` (paper §3 equations (32)–(33)). For a relaxed
     # end-to-end check we pin:
     #   - decay of |u| with distance (Stokeslet falls off as 1/r at far
     #     field; we assert near-particle vs far-particle magnitudes),
@@ -473,9 +473,9 @@ end
     # point, which is required for exact axial symmetry of the spread.
     config = FFCMConfig{T}(;
         L = L, R_c = T(1), N = 1,
-        Σ_over_σ = T(1),
+        kernel_widths_ratio = T(1),
         num_grid_points = (M, M, M),
-        M_G = 13, μ = T(1),
+        M_G = 13, viscosity = T(1),
     )
     Y = T[L[1] / 2; L[2] / 2; L[3] / 2;;]
     F = T[1; 0; 0;;]
@@ -513,7 +513,7 @@ end
 end
 
 @testset "Zero forcing produces zero velocity at every grid point" begin
-    # `-μ Δu + ∇p = 0` with `∇·u = 0` and periodic boundary conditions
+    # `-μ Δu + ∇p = 0` with `∇⋅u = 0` and periodic boundary conditions
     # admits only the constant solution; with the mean-flow gauge `û(0) = 0`
     # the constant solution is zero. The Fourier-space projection must
     # reproduce this identity to round-off.
@@ -522,10 +522,10 @@ end
             L = (T(4), T(4), T(4)),
             R_c = T(1),
             N = 1,
-            Σ_over_σ = T(2),
+            kernel_widths_ratio = T(2),
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8,
-            μ = T(1),
+            viscosity = T(1),
         )
         # `force_density` is zero-initialised at construction.
         stokes_solve!(config)

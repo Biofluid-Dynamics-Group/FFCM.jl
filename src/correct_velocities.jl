@@ -1,15 +1,13 @@
 """
     _self_correction(σ, Σ, a, μ) -> T
 
-The `r → 0` limit of the pairwise velocity correction (paper Appendix B,
-equation (B.1)): a scalar, the diagonal self-mobility correction
-`M^VF_nn − M̃^VF_nn` applied to every particle independent of its neighbours.
-With `a = σ√π` (paper §2 radius–width relation) and `η = μ`,
+The `r → 0` limit of the pairwise velocity correction (paper Appendix B, equation (B.1)): a
+scalar, the diagonal self-mobility correction `M^VF_nn - M̃^VF_nn` applied to every particle
+independent of its neighbours. With `a = σ√π` (paper §2 radius-width relation) and `η = μ`,
 
-    self_correction_term = 1/(6πμa) − 1/(6πμ·Σ√π) + (σ²−Σ²)/(12μ(Σ√π)³) − (σ²−Σ²)²/(32μ·Σ⁵·π^{3/2}).
+    self_correction_term = 1/(6πμa) - 1/(6πμ⋅Σ√π) + (σ²−Σ²)/(12μ(Σ√π)³) - (σ²−Σ²)²/(32μ⋅Σ⁵⋅π^{3/2}).
 
-It vanishes at `Σ = σ` (the standard-FCM degenerate limit). Pure and
-allocation-free.
+It vanishes at `Σ = σ` (the standard-FCM limit).
 
 # Arguments
 - `σ::T`: the physical kernel width.
@@ -24,41 +22,38 @@ See `spec/pairwise-correction.md`.
 """
 function _self_correction(σ::T, Σ::T, a::T, μ::T) where {T}
     σ²_minus_Σ² = σ^2 - Σ^2
-    Σπ = Σ * sqrt(T(π))
-    return one(T) / (T(6) * T(π) * μ * a) - one(T) / (T(6) * T(π) * μ * Σπ) +
-           σ²_minus_Σ² / (T(12) * μ * Σπ^3) -
+    Σ_sqrtπ = Σ * sqrt(T(π))
+    return one(T) / (T(6) * T(π) * μ * a) - one(T) / (T(6) * T(π) * μ * Σ_sqrtπ) +
+           σ²_minus_Σ² / (T(12) * μ * Σ_sqrtπ^3) -
            σ²_minus_Σ²^2 / (T(32) * μ * Σ^5 * sqrt(T(π)^3))
 end
 
 """
     _correction_scalars(r, σ, Σ, μ) -> Tuple{T, T}
 
-The two pair scalars of the real-space velocity correction at separation `r`,
-collapsed from the typo-corrected paper §3 equation (31): the correction tensor
-is `isotropic_coefficient·I + parallel_coefficient·xxᵀ` (un-normalised `xxᵀ`),
-so the velocity of particle `n` from the force `F_m` on a neighbour `m` is
+The two pair scalars of the real-space velocity correction at separation `r`, collapsed from
+the typo-corrected paper §3 equation (31): the correction tensor is
+`isotropic_coefficient⋅I + parallel_coefficient⋅x⊗x`, so the velocity
+of particle `n` from the force `F_m` on a neighbour `m` is
 
-    ΔV_n += isotropic_coefficient·F_m + parallel_coefficient·(x·F_m)·x,  x = Y_n − Y_m.
+    ΔV_n += isotropic_coefficient⋅F_m + parallel_coefficient⋅(x⋅F_m)⋅x,  x = Y_n - Y_m.
 
-With `η = μ`, `σ²_minus_Σ² = σ²−Σ²`, `erf_{2w} = erf(r/(2w))` (the √2-scaled-width
-argument; see the spec for the equation-(31) `erf`-argument typo note), and
-Gaussians `Δ_w = (4πw²)^{-3/2}·e^{-r²/4w²}`, the grouped coefficients of
-`(erf_{2σ}−erf_{2Σ})`, `Δ_σ`, and `Δ_Σ` are as documented in
-`spec/pairwise-correction.md`. Needs exactly two `erf` and two `exp`.
+With `η = μ`, `σ²_minus_Σ² = σ²−Σ²`, `erf_{2w} = erf(r/(2w))` (the √2-scaled-width argument;
+see the spec for the equation-(31) `erf`-argument typo note), and Gaussians
+`Δ(w) = (4πw²)^{-3/2}⋅e^{-r²/4w²}`, the grouped coefficients of `(erf_{2σ}-erf_{2Σ})`, `Δ(σ)`,
+and `Δ(Σ)` are as documented in `spec/pairwise-correction.md`.
 
 # Arguments
-- `r::T`: the centre-to-centre separation `|Y_n − Y_m|`. Must be `> 0`.
+- `r::T`: the centre-to-centre separation `|Y_n - Y_m|`. Must be `> 0`.
 - `σ::T`, `Σ::T`: the physical and modified-kernel widths.
 - `μ::T`: the fluid viscosity.
 
 # Returns
-- `Tuple{T, T}`: `(isotropic_coefficient, parallel_coefficient)` — the
-  coefficient of `I` and the coefficient of `xxᵀ` (the component along the
-  separation `x`).
+- `Tuple{T, T}`: `(isotropic_coefficient, parallel_coefficient)` — the coefficient of `I`
+  and the coefficient of `xxᵀ` (the component along the separation `x`).
 
 # Notes
-Pure and allocation-free. Valid for `0 < r`; the `r = 0` diagonal is the
-separate `_self_correction`.
+Valid for `r > 0`; the `r = 0` diagonal is the separate `_self_correction`.
 
 See `spec/pairwise-correction.md`.
 """
@@ -100,18 +95,17 @@ end
 """
     _min_image(x, L) -> SVector{3, T}
 
-Reduce the separation vector `x = Y_n − Y_m` to its nearest periodic image,
-folding each axis to `[−L_i/2, L_i/2]` by `x_i − L_i·round(x_i/L_i)`
-(`RoundNearestTiesToEven`). Because `round(−y) = −round(y)` for ties-to-even,
-the reduction is exactly antisymmetric (`_min_image(−x) = −_min_image(x)`),
-which keeps the pair correction symmetric. Pure and allocation-free.
+Reduce the separation vector `x = Y_n - Y_m` to its nearest periodic image, folding each
+axis to `[-L_i/2, L_i/2]` by `x_i - L_i⋅round(x_i/L_i)` (`RoundNearestTiesToEven`). Because
+`round(-y) = -round(y)` for ties-to-even, the reduction is exactly antisymmetric
+(`_min_image(-x) = -_min_image(x)`), which keeps the pair correction symmetric.
 
 # Arguments
-- `x::SVector{3, T}`: the raw separation vector `Y_n − Y_m`.
+- `x::SVector{3, T}`: the raw separation vector `Y_n - Y_m`.
 - `L::NTuple{3, T}`: the periodic box lengths.
 
 # Returns
-- `SVector{3, T}`: the minimum-image separation, each axis in `[−L_i/2, L_i/2]`.
+- `SVector{3, T}`: the minimum-image separation, each axis in `[-L_i/2, L_i/2]`.
 """
 @inline function _min_image(x::SVector{3, T}, L::NTuple{3, T}) where {T}
     return SVector{3, T}(
@@ -124,26 +118,24 @@ end
 """
     correct_velocities!(V, config) -> V
 
-Step 6 of the Fast FCM algorithm (Su & Keaveny 2024, §4). Add the real-space
-pairwise correction `M^VF − M̃^VF` (paper §3 equation (31)) and the per-particle
-self term (paper Appendix B, equation (B.1)) to the interpolated velocities `V`,
-the same `3×N` buffer `interpolate_velocities!` wrote, in the caller's
-**original** particle order. The correction is **added** in place
-(`V[:, n] += ΔV_n`), realising `M = M̃ + (M − M̃)`.
+Step 6 of the Fast FCM algorithm (Su & Keaveny 2024, §4). Add the real-space pairwise
+correction `M^VF - M̃^VF` (paper §3 equation (31)) and the per-particle self term (paper
+Appendix B, equation (B.1)) to the interpolated velocities `V`, the same `3xN` buffer
+`interpolate_velocities!` wrote, in the caller's **original** particle order. The correction
+is **added** in place (`V[:, n] += ΔV_n`), realising `M = M̃ + (M - M̃)`.
 
-Each particle gathers the correction from neighbours within `config.R_c` over
-the 27 surrounding cells, applying
-`ΔV_n += isotropic_coefficient·F_m + parallel_coefficient·(x·F_m)·x` with the
-two pair scalars of `_correction_scalars` and the closed-form self term. The
-result completes the σ-regularised mobility, independent of Σ. Allocation-free
-and type-stable on `T <: AbstractFloat`.
+Each particle gathers the correction from neighbours within `config.R_c` over the 27
+surrounding cells, applying
+`ΔV_n += isotropic_coefficient⋅F_m + parallel_coefficient⋅(x⋅F_m)⋅x` with the two pair
+scalars of `_correction_scalars` and the closed-form self term. The result completes the
+σ-regularised mobility, independent of Σ.
 
 # Arguments
-- `V::AbstractMatrix{T}`: the `3×N` velocity matrix to correct in place (the
-  output of `interpolate_velocities!`, in original particle order).
+- `V::AbstractMatrix{T}`: the `3xN` velocity matrix to correct in place (the output of
+  `interpolate_velocities!`, in original particle order).
 - `config::FFCMConfig{T}`: the compiled configuration. Reads `config.Y_sorted`,
-  `config.F_sorted`, the cell list (`config.cell_start` / `config.cell_end`),
-  and `config.original_index` (populated by `sort_particles_by_cell!`).
+  `config.F_sorted`, the cell list (`config.cell_start` / `config.cell_end`), and
+  `config.original_index` (populated by `sort_particles_by_cell!`).
 
 # Returns
 - `V`: the same matrix, with the pairwise + self correction added.
@@ -175,39 +167,35 @@ end
         num_cells, L, σ, Σ, a, μ, R_c,
     ) -> V
 
-Function-barrier kernel for `correct_velocities!`. Computes the self scalar
-once, then iterates cells in increasing linear hash (`x` fastest, `z` slowest,
-matching `_assign_cells_kernel!`). For each sorted particle `s` it seeds the
-self term `self_correction_term·F_s`, sweeps the 27 wrapped neighbour cells, and
-for every neighbour `s'` within `R_c` (minimum-image) accumulates
-`isotropic_coefficient·F_{s'} + parallel_coefficient·(x·F_{s'})·x`. The result
-is scattered to `V[:, original_index[s]]` via `+=` (inverse step-2
-permutation). Each particle writes only its own column — a gather, no write
-race.
+Kernel for `correct_velocities!`. Computes the self scalar once, then iterates cells in
+increasing linear hash (`x` fastest, `z` slowest, matching `_assign_cells_kernel!`). For
+each sorted particle `s` it seeds the self term `self_correction_term⋅F_s`, sweeps the 27
+wrapped neighbour cells, and for every neighbour `s'` within `R_c` (minimum-image)
+accumulates `isotropic_coefficient⋅F_{s'} + parallel_coefficient⋅(x⋅F_{s'})⋅x`. The result
+is scattered to `V[:, original_index[s]]` via `+=` (inverse step-2 permutation). Each
+particle writes only its own column — a gather, no write race.
 
 # Arguments
-- `V::AbstractMatrix{T}`: the `3×N` velocity matrix; corrected in place (`+=`).
-- `Y_sorted::AbstractMatrix{T}`, `F_sorted::AbstractMatrix{T}`: the `3×N` sorted
-  positions and forces.
-- `cell_start::Vector{Int32}`, `cell_end::Vector{Int32}`: the 1-based inclusive
-  per-cell slot ranges.
-- `original_index::Vector{Int32}`: the sorted-slot → original-particle
-  permutation.
+- `V::AbstractMatrix{T}`: the `3xN` velocity matrix; corrected in place (`+=`).
+- `Y_sorted::AbstractMatrix{T}`, `F_sorted::AbstractMatrix{T}`: the `3xN` sorted positions
+  and forces.
+- `cell_start::Vector{Int32}`, `cell_end::Vector{Int32}`: the 1-based inclusive per-cell
+  slot ranges.
+- `original_index::Vector{Int32}`: the sorted-slot to original-particle permutation.
 - `num_cells::NTuple{3, Int32}`: the cell-grid dimensions.
 - `L::NTuple{3, T}`: the periodic box lengths.
-- `σ::T`, `Σ::T`, `a::T`, `μ::T`: the kernel widths, particle radius, and
-  viscosity.
+- `σ::T`, `Σ::T`, `a::T`, `μ::T`: the kernel widths, particle radius, and viscosity.
 - `R_c::T`: the correction cutoff radius.
 
 # Returns
 - `V`: the same matrix, with the correction scattered in.
 
 # Notes
-Preconditions (caller-guaranteed, so the loops are `@inbounds`): `V`,
-`Y_sorted`, `F_sorted` have shape `(3, N)`; `cell_start`/`cell_end` have length
-`prod(num_cells)` with `num_cells[i] ≥ 3`; `original_index` is a permutation of
-`1:N`; positions folded into `[0, L_i)`; `R_c ≤ min(L)/2` (enforced by the
-constructor) so the minimum image is unambiguous.
+Preconditions (caller-guaranteed, so the loops are `@inbounds`): `V`, `Y_sorted`, `F_sorted`
+have shape `(3, N)`; `cell_start`/`cell_end` have length `prod(num_cells)` with
+`num_cells[i] ≥ 3`; `original_index` is a permutation of `1:N`; positions folded into
+`[0, L_i)`; `R_c ≤ min(L)/2` (enforced by the constructor) so the minimum image is
+unambiguous.
 
 See `spec/pairwise-correction.md`.
 """

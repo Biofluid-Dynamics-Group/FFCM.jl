@@ -3,7 +3,7 @@ using Random: Xoshiro
 using FFCM: _assign_cells_kernel!
 
 @testset "Hash for a position in the origin cell is zero" begin
-    # Cubic 4×4×4 grid: cell_size_i = 1, inv_cell_size_i = 1, m_i = 4.
+    # Cubic 4x4x4 grid: cell_size_i = 1, inv_cell_size_i = 1, m_i = 4.
     cell_hash = Vector{Int32}(undef, 1)
     inv_cell_size = (1.0, 1.0, 1.0)
     num_cells = (Int32(4), Int32(4), Int32(4))
@@ -12,9 +12,9 @@ using FFCM: _assign_cells_kernel!
     @test cell_hash[1] == Int32(0)
 end
 
-@testset "Hash matches the paper linearisation x + (y + z·m_y)·m_x" begin
-    # Particle at (2.5, 2.5, 2.5) in a 4×4×4 grid sits in cell (2, 2, 2).
-    # Expected hash: 2 + (2 + 2·4)·4 = 42.
+@testset "Hash matches the paper linearisation x + (y + z⋅m_y)⋅m_x" begin
+    # Particle at (2.5, 2.5, 2.5) in a 4x4x4 grid sits in cell (2, 2, 2).
+    # Expected hash: 2 + (2 + 2⋅4)⋅4 = 42.
     cell_hash = Vector{Int32}(undef, 1)
     inv_cell_size = (1.0, 1.0, 1.0)
     num_cells = (Int32(4), Int32(4), Int32(4))
@@ -26,7 +26,7 @@ end
 @testset "Anisotropic grid uses m_x and m_y as the linearisation strides" begin
     # L = (4, 6, 8), R_c = 1 ⇒ num_cells = (4, 6, 8), cell_size_i = 1.
     # Particle at (0.5, 2.5, 5.5) sits in cell (0, 2, 5).
-    # Expected hash: 0 + (2 + 5·6)·4 = 128.
+    # Expected hash: 0 + (2 + 5⋅6)⋅4 = 128.
     cell_hash = Vector{Int32}(undef, 1)
     inv_cell_size = (1.0, 1.0, 1.0)
     num_cells = (Int32(4), Int32(6), Int32(8))
@@ -37,15 +37,15 @@ end
 
 @testset "Position at the upper boundary is clamped to the last valid cell" begin
     # If a position reaches the kernel at Y_i = L_i (because fp roundoff or a
-    # caller that bypassed `wrap_positions!`), Y_i · inv_cell_size_i lands at
-    # m_i, and `floor(Int32, ·)` returns m_i — one past the last valid cell.
+    # caller that bypassed `wrap_positions!`), Y_i ⋅ inv_cell_size_i lands at
+    # m_i, and `floor(Int32, ⋅)` returns m_i — one past the last valid cell.
     # The min-clamp must bring it back to m_i - 1.
     cell_hash = Vector{Int32}(undef, 1)
     inv_cell_size = (1.0, 1.0, 1.0)
     num_cells = (Int32(4), Int32(4), Int32(4))
     Y = Float64[4.0; 4.0; 4.0;;]
     _assign_cells_kernel!(cell_hash, Y, inv_cell_size, num_cells)
-    # Cell (3, 3, 3) → 3 + (3 + 3·4)·4 = 63.
+    # Cell (3, 3, 3) → 3 + (3 + 3⋅4)⋅4 = 63.
     @test cell_hash[1] == Int32(63)
 end
 

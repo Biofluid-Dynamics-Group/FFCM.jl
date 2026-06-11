@@ -39,7 +39,8 @@ collected here.
 - `original_index` — the sort permutation, sorted slot $\mapsto$ original particle
   index ($n = \text{original\_index}[s]$).
 - `cell_start`, `cell_end` — the per-cell 1-based **inclusive** range of sorted
-  slots; `next_free_slot` is the counting-sort scratch (per-cell next free slot).
+  slots; `counting_sort_scratch` is the counting-sort scratch (the per-cell
+  histogram, then the per-cell write cursor).
 - `a` $= a$ — the particle radius; $a = 1$ in the current implementation.
 - `σ` $= \sigma$ — the FCM Gaussian width, $\sigma = \frac{a}{\sqrt{\pi}}$.
 - `Σ` $= \Sigma$ — the modified (fast-FCM) kernel width, with $\Sigma \geq \sigma$.

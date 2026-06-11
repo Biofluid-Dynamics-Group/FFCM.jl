@@ -28,7 +28,7 @@ end
     # Stokeslet convolved with the kernel on both the spread and the
     # interpolate side):
     #
-    #   Ṽ_self = (1/L³) Σ_{k≠0} e^{-σ²k²}/(μ k²) (I − k̂k̂ᵀ) · F,
+    #   Ṽ_self = (1/L³) Σ_{k≠0} e^{-σ²k²}/(μ k²) (I − k̂k̂ᵀ) ⋅ F,
     #   k = (2π/L) n,  n ∈ ℤ³ \ {0}.
     #
     # This continuum sum captures every periodic finite-size correction
@@ -40,8 +40,8 @@ end
     M = Int32(32)
     config = FFCMConfig{T}(;
         L = L, R_c = T(1), N = 1,
-        Σ_over_σ = T(1),
-        μ = T(1),
+        kernel_widths_ratio = T(1),
+        viscosity = T(1),
         num_grid_points = (M, M, M),
         # M_G = 21 (odd ⇒ symmetric stencil) reaches (M_G/2)h ≈ 4.65σ, so
         # the Gaussian is captured to ~2e-5 relative at the stencil edge.
@@ -64,7 +64,7 @@ end
     self_mobility_xx = _periodic_self_mobility_xx(σ, μ, Lx; n_max = 15)
 
     # Grid-resolution / stencil-truncation limited (≈ 9e-7 at this σ/h),
-    # not round-off; rtol = 1e-5 holds with ~10× margin.
+    # not round-off; rtol = 1e-5 holds with ~10x margin.
     rtol = T(1e-5)
     @test V[1, 1] ≈ self_mobility_xx rtol = rtol
 
@@ -106,7 +106,7 @@ end
     velocities = T[]
     for Σ_over_σ in (T(1.25), T(1.5))
         config = FFCMConfig{T}(;
-            L = L, R_c = T(1), N = 1, Σ_over_σ = Σ_over_σ, μ = T(1),
+            L = L, R_c = T(1), N = 1, kernel_widths_ratio = Σ_over_σ, viscosity = T(1),
             num_grid_points = (M, M, M), M_G = M_G,
         )
         # The assembled driver composes all six steps in one allocation-free,

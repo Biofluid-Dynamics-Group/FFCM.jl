@@ -1,21 +1,13 @@
 """
     stokes_solve!(config) -> config
 
-Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4; the Fourier-space
-Stokes inversion of §3, equations (32)–(33)). Apply the inverse Stokes operator
-`L^{-1}` to the spread force field in `config.force_density` and write the
-resulting fluid velocity field to `config.fluid_velocity`. Allocation-free and
-type-stable on `T <: AbstractFloat`.
-
-Operationally:
-  1. Forward r2c FFT each component of `force_density` into the corresponding
-     component of `fluid_hat`.
-  2. Apply `(I − k̂k̂ᵀ)/(μ k²) / M` per Fourier mode in place on `fluid_hat`;
-     zero the `k = 0` mode (the mean-flow gauge fix).
-  3. Backward c2r FFT each component of `fluid_hat` into the corresponding
-     component of `fluid_velocity`.
-
-The `1/M` factor compensates the unnormalised FFTW round-trip.
+Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4; the Fourier-space Stokes inversion
+of §3, equations (32)-(33)). Apply the inverse Stokes operator `L^{-1}` to the spread force
+field in `config.force_density` and write the resulting fluid velocity field to
+`config.fluid_velocity`: a forward FFT of each `force_density` component into `fluid_hat`,
+the per-mode projection `(I - k̂⊗k̂)/(μ k²) / M` in place on `fluid_hat` with the `k = 0`
+mode zeroed (the mean-flow gauge fix), and an inverse FFT into `fluid_velocity`. The `1/M`
+factor compensates the unnormalised FFTW round-trip.
 
 # Arguments
 - `config::FFCMConfig{T}`: the compiled configuration. Reads
@@ -23,8 +15,8 @@ The `1/M` factor compensates the unnormalised FFTW round-trip.
   `config.fluid_velocity` and overwrites `config.fluid_hat`.
 
 # Returns
-- `config`: the same configuration, with `config.fluid_velocity` holding the
-  Stokes velocity field.
+- `config`: the same configuration, with `config.fluid_velocity` holding the Stokes velocity
+  field.
 
 See `spec/stokes-solve.md`.
 """
@@ -56,28 +48,26 @@ end
         fx̂, fŷ, fẑ, k_x, k_y, k_z, μ, inv_M,
     ) -> nothing
 
-Function-barrier kernel for `stokes_solve!`. In-place Fourier-space projection:
-for each `(ix, iy, iz)` with `k = (k_x[ix], k_y[iy], k_z[iz])`, compute
-`k² = kᵀk`, `α = inv_M / (μ k²)`, `c = (k · f̂) / k²`, and replace
-`f̂ ← α · (f̂ − k · c)` component-wise. The `k = 0` mode is gauge-fixed to zero
-(paper §3; periodic Stokes is undefined there).
+Kernel for `stokes_solve!`: the in-place Fourier-space projection. For each `(ix, iy, iz)`
+with `k = (k_x[ix], k_y[iy], k_z[iz])`, compute `k² = kᵀk`, `α = inv_M / (μ k²)`,
+`c = (k ⋅ f̂) / k²`, and replace `f̂ ← α ⋅ (f̂ - k ⋅ c)` component-wise. The `k = 0` mode is
+fixed to zero.
 
 # Arguments
-- `fx̂`, `fŷ`, `fẑ`: the three `Array{Complex{T}, 3}` Fourier-space force
-  components; overwritten in place with the projected velocity.
-- `k_x::Vector{T}`, `k_y::Vector{T}`, `k_z::Vector{T}`: the per-axis wavevector
-  components.
+- `fx̂`, `fŷ`, `fẑ`: the three `Array{Complex{T}, 3}` Fourier-space force components;
+  overwritten in place with the projected velocity.
+- `k_x::Vector{T}`, `k_y::Vector{T}`, `k_z::Vector{T}`: the per-axis wavevector components.
 - `μ::T`: the fluid viscosity.
-- `inv_M::T`: the `1/M` FFTW round-trip normalisation, `M = M_x·M_y·M_z`.
+- `inv_M::T`: the `1/M` FFTW round-trip normalisation, `M = M_x⋅M_y⋅M_z`.
 
 # Returns
 - `nothing`. The three component arrays are overwritten in place.
 
 # Notes
-Preconditions (caller-guaranteed, so the loops are `@inbounds`): the three
-component arrays are `Array{Complex{T}, 3}` of shape
-`(length(k_x), length(k_y), length(k_z))`; `k_x[1] = k_y[1] = k_z[1] = 0` (the
-FFTW wrap-around layout puts the zero mode at the leading index).
+Preconditions (caller-guaranteed, so the loops are `@inbounds`): the three component arrays
+are `Array{Complex{T}, 3}` of shape `(length(k_x), length(k_y), length(k_z))`;
+`k_x[1] = k_y[1] = k_z[1] = 0` (the FFTW wrap-around layout puts the zero mode at the
+leading index).
 
 See `spec/stokes-solve.md`.
 """
@@ -92,7 +82,7 @@ function _apply_inverse_stokes_kernel!(
     inv_M::T,
 ) where {T}
     inv_μ_M = inv_M / μ
-    zero_velocity = zero(SVector{3, Complex{T}})
+    zero_mode = zero(SVector{3, Complex{T}})
     @inbounds for iz in eachindex(k_z)
         kz = k_z[iz]
         for iy in eachindex(k_y)
@@ -102,7 +92,7 @@ function _apply_inverse_stokes_kernel!(
                 k² = dot(k, k)
                 if iszero(k²)
                     # Gauge-fix the k = 0 mode (periodic Stokes is undefined there).
-                    f̂ = zero_velocity
+                    f̂ = zero_mode
                 else
                     f̂ = SVector(fx̂[ix, iy, iz], fŷ[ix, iy, iz], fẑ[ix, iy, iz])
                     inv_k² = one(T) / k²

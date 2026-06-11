@@ -25,8 +25,8 @@ function _random_mobility_setup(rng, ::Type{T}) where {T}
         L = L,
         R_c = T(1),
         N = N,
-        Σ_over_σ = one(T) + T(1.5) * rand(rng, T),
-        μ = T(0.5) + T(2) * rand(rng, T),
+        kernel_widths_ratio = one(T) + T(1.5) * rand(rng, T),
+        viscosity = T(0.5) + T(2) * rand(rng, T),
         num_grid_points = M,
         M_G = rand(rng, 6:Int(minimum(M))),
     )
@@ -55,7 +55,7 @@ end
             mobility!(V_G, config, Y, G)
             mobility!(V_combined, config, Y, a .* F .+ b .* G)
 
-            # Linearity: M(aF + bG) = a·MF + b·MG.
+            # Linearity: M(aF + bG) = a⋅MF + b⋅MG.
             @test isapprox(
                 V_combined, a .* V_F .+ b .* V_G; rtol = rtol, atol = atol,
             )

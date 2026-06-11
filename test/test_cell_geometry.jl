@@ -44,7 +44,7 @@ end
     @test length(config.original_index) == N
     @test length(config.cell_start) == total
     @test length(config.cell_end) == total
-    @test length(config.next_free_slot) == total
+    @test length(config.counting_sort_scratch) == total
     @test size(config.Y_sorted) == (3, N)
     @test size(config.F_sorted) == (3, N)
 end

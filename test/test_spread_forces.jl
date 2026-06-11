@@ -13,8 +13,8 @@ using StructArrays: components
         M = Int32(8)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -27,7 +27,7 @@ using StructArrays: components
         spread_forces!(config)
 
         # Reference computed fresh from paper §3 equation (22) expanded as
-        # Δ + (σ² - Σ²)/2 · ∇²Δ, where ∇²Δ = (r²/Σ⁴ - 3/Σ²) Δ.
+        # Δ + (σ² - Σ²)/2 ⋅ ∇²Δ, where ∇²Δ = (r²/Σ⁴ - 3/Σ²) Δ.
         σ, Σ, h = config.σ, config.Σ, config.h
         Y_n = (T(2), T(2), T(2))
         F_n = (T(1), T(0), T(0))
@@ -64,8 +64,8 @@ end
         M = Int32(16)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 4,
         )
@@ -99,24 +99,24 @@ end
     # discretisation of the integral. Paper Table 1 tabulates this error for
     # chosen (M_G, Σ/h).
     for T in (Float32, Float64)
-        # Parameters chosen so the stencil radius `(M_G/2)·h ≈ 7.1·Σ`
+        # Parameters chosen so the stencil radius `(M_G/2)⋅h ≈ 7.1⋅Σ`
         # captures the Gaussian to ~1 - erf(7.1/√2)³ ≈ 0 mass — far above
-        # the ~3.4·Σ threshold for sub-percent per-particle conservation.
+        # the ~3.4⋅Σ threshold for sub-percent per-particle conservation.
         # `Σ/h ≈ 1.13` matches the paper's lowest-tolerance regime
         # (paper Table 1). The box `L = 16` keeps the
-        # nearest periodic image at ~7·Σ from any particle, where the
+        # nearest periodic image at ~7⋅Σ from any particle, where the
         # kernel value is < 1e-10 — far below the rounding floor.
         L = (T(16), T(16), T(16))
         M = Int32(16)
-        N = 27   # a 3×3×3 sub-grid
+        N = 27   # a 3x3x3 sub-grid
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )
-        # Particles on a 3×3×3 lattice with phase-coherent forces. The
+        # Particles on a 3x3x3 lattice with phase-coherent forces. The
         # specific positions and forces do not matter for the invariant;
         # we just need to break the trivial single-particle case.
         for n in 1:N
@@ -139,7 +139,7 @@ end
 
         # Tolerance follows the paper-tabulated error for the chosen
         # (M_G, Σ/h). At Σ/h ≈ 1.13 with M_G = 16 the stencil radius is
-        # ≈ 7.1·Σ, so the truncation error sits well below `sqrt(eps(T))`
+        # ≈ 7.1⋅Σ, so the truncation error sits well below `sqrt(eps(T))`
         # in both precisions; we use it as a single relaxed bound.
         rtol = sqrt(eps(T))
         @test total_grid[1] ≈ total_force[1] rtol=rtol
@@ -149,7 +149,7 @@ end
 end
 
 @testset "First moment of the spread is the particle position (within truncation tolerance)" begin
-    # ∫ x · Δ̃ₙ(x; Σ) d³x = Yₙ (Laplacian of Gaussian has zero first
+    # ∫ x ⋅ Δ̃ₙ(x; Σ) d³x = Yₙ (Laplacian of Gaussian has zero first
     # moment, so the modified kernel has the same centroid as the plain
     # Gaussian).
     for T in (Float32, Float64)
@@ -157,8 +157,8 @@ end
         M = Int32(16)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )
@@ -201,8 +201,8 @@ end
         M = Int32(16)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -232,7 +232,7 @@ end
 end
 
 @testset "Spread is linear in the input force vector" begin
-    # J̃†[αF₁ + βF₂] = α·J̃†[F₁] + β·J̃†[F₂]. Two particles at distinct
+    # J̃†[αF₁ + βF₂] = α⋅J̃†[F₁] + β⋅J̃†[F₂]. Two particles at distinct
     # positions; spread the sum versus the linear combination of separate
     # spreads.
     for T in (Float32, Float64)
@@ -241,8 +241,8 @@ end
         N = 2
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -285,13 +285,13 @@ end
         M_G = 9
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = M_G,
         )
         h = config.h
-        # `Y = 4·h` is the grid point at 1-based index 5 in each axis.
+        # `Y = 4⋅h` is the grid point at 1-based index 5 in each axis.
         anchor = Int32(4)
         Y_val = T(anchor) * h
         config.Y_sorted[1, 1] = Y_val
@@ -316,7 +316,7 @@ end
 end
 
 @testset "Σ = σ collapses the modified kernel to the standard-FCM Gaussian" begin
-    # `Σ_over_σ = 1` ⇒ σ²_minus_Σ² = 0 ⇒ a₀ = 1, a₂ = 0 ⇒ Δ̃ₙ = Δₙ.
+    # `kernel_widths_ratio = 1` ⇒ σ²_minus_Σ² = 0 ⇒ a₀ = 1, a₂ = 0 ⇒ Δ̃ₙ = Δₙ.
     # The particle sits at the box centre so the M_G^3 stencil never wraps
     # around the periodic boundary; the impl's unwrapped stencil distance
     # then coincides with the canonical grid-point distance and the spread
@@ -331,8 +331,8 @@ end
         M = Int32(16)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(1),
-            μ = T(1),
+            kernel_widths_ratio = T(1),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )

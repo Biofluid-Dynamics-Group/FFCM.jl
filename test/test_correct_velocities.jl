@@ -19,11 +19,11 @@ function _apply_correction(config::FFCMConfig{T}, Y, F) where {T}
 end
 
 # --- Independent oracle: the full FCM pairwise tensors (paper §2 equations
-# (8)–(10) and (16)–(17), §3 equation (30)), assembled as 3×3 matrices. The
+# (8)–(10) and (16)–(17), §3 equation (30)), assembled as 3x3 matrices. The
 # correction is the difference of the two full mobilities,
 # M^VF − M̃^VF = S(σ√2) − S(Σ√2) − (σ²−Σ²)Q(Σ√2) − ¼(σ²−Σ²)²T(Σ√2)
 # (paper §3 equation (31)). This is an algebraically-distinct route to the same
-# tensor the implementation collapses into A·I + B·xxᵀ, so it cross-checks the
+# tensor the implementation collapses into A⋅I + B⋅xxᵀ, so it cross-checks the
 # collapse and the equation-(31) erf-argument. `s` is the √2-scaled width.
 
 _gaussian(r², s², ::Type{T}) where {T} =
@@ -86,7 +86,7 @@ end
 end
 
 @testset "Correction scalars reproduce the full-tensor difference of mobilities" begin
-    # `_correction_scalars` returns (A, B) with the correction tensor A·I + B·xxᵀ
+    # `_correction_scalars` returns (A, B) with the correction tensor A⋅I + B⋅xxᵀ
     # (un-normalised xxᵀ). Cross-check against the independent full-tensor oracle
     # over a range of separations, directions, and parameters.
     for T in (Float32, Float64)
@@ -113,7 +113,7 @@ end
 
 @testset "Self correction matches the r → 0 limit (paper Appendix B eq (B.1))" begin
     # Paper Appendix B, equation (B.1): the well-defined r → 0 diagonal of the
-    # pairwise correction, a scalar × I added to every particle. Pin
+    # pairwise correction, a scalar x I added to every particle. Pin
     # `_self_correction` against the closed form written in an independent
     # factorisation, over a sweep of Σ/σ and μ. a = σ√π (paper §2).
     for T in (Float32, Float64)
@@ -121,12 +121,12 @@ end
         σ = a / sqrt(T(π))
         for Σ_over_σ in (T(1.25), T(2), T(3.5)), μ in (T(0.5), T(1), T(2.7))
             Σ = Σ_over_σ * σ
-            Σπ = Σ * sqrt(T(π))
+            Σ_sqrtπ = Σ * sqrt(T(π))
             σ²_minus_Σ² = σ^2 - Σ^2
             # Reference: paper Appendix B equation (B.1), grouped term by term.
             stokes = one(T) / (T(6) * T(π) * μ * a)
-            mod_stokes = one(T) / (T(6) * T(π) * μ * Σπ)
-            pd_term = σ²_minus_Σ² / (T(12) * μ * Σπ^3)
+            mod_stokes = one(T) / (T(6) * T(π) * μ * Σ_sqrtπ)
+            pd_term = σ²_minus_Σ² / (T(12) * μ * Σ_sqrtπ^3)
             bilap = σ²_minus_Σ²^2 / (T(32) * μ * Σ^5 * T(π)^(T(3) / 2))
             reference = stokes - mod_stokes + pd_term - bilap
 
@@ -138,7 +138,7 @@ end
 
 @testset "Isolated particle gets only the self term" begin
     # A particle with no neighbour within R_c receives only the diagonal self
-    # correction: V[:, n] += self_correction_term · F_n.
+    # correction: V[:, n] += self_correction_term ⋅ F_n.
     for T in (Float32, Float64)
         config = _standard_test_config(T; N = 2)
         a, σ, Σ, μ = config.a, config.σ, config.Σ, config.μ
@@ -153,7 +153,7 @@ end
 end
 
 @testset "Two-particle pair correction matches the difference-of-mobilities tensor" begin
-    # Velocity of each particle = self term + (correction tensor)·(neighbour force).
+    # Velocity of each particle = self term + (correction tensor)⋅(neighbour force).
     # The tensor is symmetric in x = Y_n − Y_m, so both partners share it.
     for T in (Float32, Float64)
         config = _standard_test_config(T; N = 2)

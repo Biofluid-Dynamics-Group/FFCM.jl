@@ -17,12 +17,12 @@ function _fcm_grid_kwargs(L::NTuple{3, T}) where {T}
     h_target = L[1] / 8
     num_grid_points = ntuple(i -> Int32(round(Int, L[i] / h_target)), 3)
     return (
-        Σ_over_σ = T(2),
+        kernel_widths_ratio = T(2),
         num_grid_points = num_grid_points,
         # The stencil cannot exceed the grid on any axis; clamp for thin domains
         # where a short axis yields fewer than 8 grid points.
         M_G = min(8, Int(minimum(num_grid_points))),
-        μ = T(1),
+        viscosity = T(1),
     )
 end
 
@@ -40,13 +40,13 @@ function _standard_test_config(
     R_c = T(1),
 ) where {T}
     return FFCMConfig{T}(;
-        L = L, R_c = R_c, N = N, Σ_over_σ = Σ_over_σ, μ = μ,
+        L = L, R_c = R_c, N = N, kernel_widths_ratio = Σ_over_σ, viscosity = μ,
         num_grid_points = num_grid_points, M_G = M_G,
     )
 end
 
 # Positions and forces for a compact particle cluster around the box centre:
-# spacing 0.25 on a 4×4×4 sub-lattice, so many pairs fall within R_c = 1 and
+# spacing 0.25 on a 4x4x4 sub-lattice, so many pairs fall within R_c = 1 and
 # the pair-correction branch is exercised. Forces are a deterministic
 # non-trivial pattern.
 function _clustered_cloud(::Type{T}, N) where {T}

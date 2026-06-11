@@ -90,7 +90,7 @@ A thin operator closing over `config` and a fixed position matrix `Y`, implement
 - `size(M) == (3N, 3N)`, `eltype(M) == T`.
 - `mul!(v, M, f)` — marshals `f` into a $3 \times N$ scratch, runs `mobility!`, and marshals
   the result into `v`. Allocation-free.
-- `mul!(v, M, f, α, β)` — the five-argument form `v .= α·(M·f) + β·v`; the $\beta = 0$ case
+- `mul!(v, M, f, α, β)` — the five-argument form `v .= α⋅(M⋅f) + β⋅v`; the $\beta = 0$ case
   overwrites `v` (its prior, possibly uninitialised, contents are ignored).
 - `M * F` — out-of-place convenience applying the operator to a force matrix `F` in the
   natural $3 \times N$ layout, returning a fresh $3 \times N$ velocity matrix (the mirror of
@@ -142,7 +142,7 @@ which respects the column-major convention without a `reshape` allocation.
   `F` are not mutated; `V` comes out in the caller's original order; the 3- and 5-argument
   `mul!` agree with `mobility!` and obey the `α`/`β` contract (including $\beta = 0$ on an
   uninitialised `v`); `size` and `eltype` are correct; the `FFCMMobility` constructor rejects
-  a non-`3×N` `Y` and an `N` mismatch.
+  a non-`3xN` `Y` and an `N` mismatch.
 - `test/test_single_sphere_mobility.jl` — the end-to-end accuracy result: the assembled
   operator reproduces the $\sigma$-regularised single-sphere periodic self-mobility
   independent of $\Sigma$, to grid-truncation tolerance.

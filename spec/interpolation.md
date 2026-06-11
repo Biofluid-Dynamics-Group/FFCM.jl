@@ -241,7 +241,7 @@ exactly.
 |---|---|---|---|
 | Quadrature weight | $h^3$ folded into the per-grid-point factor | $h^3$ applied once per particle to the accumulated velocity | **Keep** (diverge on location) — algebraically identical, cheaper, and keeps the adjoint test bit-exact. |
 | Stencil precompute | nearest-anchor, norm, gauss, wrap — byte-identical to its spread kernel | identical; shared with the spread via `_fill_particle_stencil!` | **Adopt** — reinforces the shared-helper extraction. |
-| Polynomial factor | `1 + temp3·r² − temp4` | $(a_0 + a_2 r^2)$ | **Keep** — algebraically identical (same as spread). |
+| Polynomial factor | `1 + temp3⋅r² − temp4` | $(a_0 + a_2 r^2)$ | **Keep** — algebraically identical (same as spread). |
 | $r^2$ handling | stores signed `xdis/ydis/zdis`, recomputes $r^2$ | stores $r^2$ directly | **Keep** the $r^2$-only precompute. |
 | Velocity-grid read | three SoA arrays | `components(fluid_velocity)`, column-major | **Adopt** — same SoA layout, `StructArray` wrapper. |
 | Stencil reduction | block reduce over threads | serial scalar accumulation | **Keep** serial for the CPU MVP; block-reduce is the GPU pattern. |

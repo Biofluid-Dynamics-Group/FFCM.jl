@@ -1,27 +1,23 @@
 """
     _modified_kernel_coefficients(σ, Σ) -> NTuple{4, T}
 
-Closed-form scalars of the modified FCM kernel (Su & Keaveny 2024, §3
-equation (22)). The modified kernel `(1 + (σ² − Σ²)/2 · Δ) Δ(x; Σ)` collapses,
-once the Laplacian acts on the isotropic Gaussian `Δ(x; Σ)`, to the polynomial
-form `(a₀ + a₂·r²)·Δ(x; Σ)`, evaluated through the separable 1-D Gaussian
-weight `inv_norm·exp(−x²·inv_2Σ²)` per axis. Force spreading
-(`_spread_forces_kernel!`) and velocity interpolation
-(`_interpolate_velocities_kernel!`) share these four scalars verbatim, because
-interpolation is the exact discrete adjoint of spreading; centralising them
-here keeps the eq-(22) expansion in one place. Pure and allocation-free; called
-once per kernel invocation, before the per-particle loop.
+Closed-form scalars of the modified FCM kernel (Su & Keaveny 2024, §3 equation (22)). The
+modified kernel `(1 + (σ² - Σ²)/2 ⋅ Δ) Δ(x; Σ)` collapses, once the Laplacian acts on the
+isotropic Gaussian `Δ(x; Σ)`, to the polynomial form `(a₀ + a₂⋅r²)⋅Δ(x; Σ)`, evaluated
+through the separable 1-D Gaussian weight `inv_norm⋅exp(-x²⋅inv_2Σ²)` per axis. Spreading
+(`_spread_forces_kernel!`) and interpolation (`_interpolate_velocities_kernel!`) must weight
+the stencil identically — interpolation is the discrete adjoint of spreading — so both read
+these four scalars.
 
 # Arguments
 - `σ::T`: the physical FCM kernel width, `σ = a/√π` for a unit-radius particle.
 - `Σ::T`: the (wider) modified-kernel width, `Σ ≥ σ`.
 
 # Returns
-- `NTuple{4, T}`: `(a₀, a₂, inv_norm, inv_2Σ²)`, where
-  `a₀ = 1 − 3(σ²−Σ²)/(2Σ²)` and `a₂ = (σ²−Σ²)/(2Σ⁴)` are the polynomial
-  coefficients, `inv_norm = 1/√(2πΣ²)` the Gaussian normalisation, and
-  `inv_2Σ² = 1/(2Σ²)` the exponent scale. At the standard-FCM limit `Σ = σ`
-  the prefactor degenerates to `a₀ = 1`, `a₂ = 0` (the unmodified Gaussian).
+- `NTuple{4, T}`: `(a₀, a₂, inv_norm, inv_2Σ²)`, where `a₀ = 1 - 3(σ²−Σ²)/(2Σ²)` and
+  `a₂ = (σ²−Σ²)/(2Σ⁴)` are the polynomial coefficients, `inv_norm = 1/√(2πΣ²)` the Gaussian
+  normalisation, and `inv_2Σ² = 1/(2Σ²)` the exponent scale. At the standard FCM limit
+  `Σ = σ` the prefactor degenerates to `a₀ = 1`, `a₂ = 0` (the unmodified Gaussian).
 
 See `spec/force-spreading.md` and `spec/interpolation.md`.
 """
@@ -29,11 +25,11 @@ function _modified_kernel_coefficients(σ::T, Σ::T) where {T}
     Σ² = Σ^2
     Σ⁴ = Σ²^2
     σ²_minus_Σ² = σ^2 - Σ²
-    a_0 = one(T) - T(3) * σ²_minus_Σ² / (T(2) * Σ²)
-    a_2 = σ²_minus_Σ² / (T(2) * Σ⁴)
+    a₀ = one(T) - T(3) * σ²_minus_Σ² / (T(2) * Σ²)
+    a₂ = σ²_minus_Σ² / (T(2) * Σ⁴)
     inv_norm = one(T) / sqrt(T(2) * T(π) * Σ²)
     inv_2Σ² = one(T) / (T(2) * Σ²)
-    return (a_0, a_2, inv_norm, inv_2Σ²)
+    return (a₀, a₂, inv_norm, inv_2Σ²)
 end
 
 """
@@ -45,27 +41,24 @@ end
         inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
     ) -> nothing
 
-Fill the per-axis stencil scratch for one particle at position `(Y1, Y2, Y3)`.
-This is the geometry shared verbatim by force spreading
-(`_spread_forces_kernel!`) and velocity interpolation
-(`_interpolate_velocities_kernel!`): because interpolation is the exact
-discrete adjoint of spreading, both must place and weight the `M_G³` stencil
-identically. Keeping the convention in one function is what guarantees that.
+Fill the per-axis stencil scratch for one particle at position `(Y1, Y2, Y3)`. Spreading
+(`_spread_forces_kernel!`) and interpolation (`_interpolate_velocities_kernel!`) both place
+and weight the `M_G³` stencil through this function — interpolation is the discrete adjoint
+of spreading, so the geometry must be identical.
 
-For each axis the stencil is nearest-anchored at `j_i = round(Y_i · inv_h)`
-(`RoundNearestTiesToEven`, the cuFCM `my_rint` convention; paper §5 Table 1
-calibration). For `k ∈ 1:M_G` it writes, per axis:
+For each axis the stencil is nearest-anchored at `j_i = round(Y_i ⋅ inv_h)`
+(`RoundNearestTiesToEven`, the cuFCM `my_rint` convention; paper §5 Table 1 calibration).
+For `k ∈ 1:M_G` it writes, per axis:
 
-- `gaussian_*[k] = inv_norm · exp(−x² · inv_2Σ²)` — the separable 1-D Gaussian
-  weight, with `x = (j_i − ⌊M_G/2⌋ + (k−1))·h − Y_i` the unwrapped stencil
-  distance.
-- `r²_*[k] = x²` — the axis-squared distance (the modified-kernel polynomial
-  needs only `r²`).
+- `gaussian_*[k] = inv_norm ⋅ exp(-x² ⋅ inv_2Σ²)` — the separable 1-D Gaussian weight, with
+  `x = (j_i - ⌊M_G/2⌋ + (k-1))⋅h - Y_i` the unwrapped stencil distance.
+- `r²_*[k] = x²` — the axis-squared distance (the modified-kernel polynomial needs only
+  `r²`).
 - `idx_*[k]` — the periodic-wrapped 1-based grid index `mod(g_i, M_i) + 1`.
 
 # Arguments
-- `gaussian_x`, `gaussian_y`, `gaussian_z`: per-axis Gaussian-weight scratch
-  (length `M_G`) to overwrite.
+- `gaussian_x`, `gaussian_y`, `gaussian_z`: per-axis Gaussian-weight scratch (length `M_G`)
+  to overwrite.
 - `r²_x`, `r²_y`, `r²_z`: per-axis squared-distance scratch (length `M_G`).
 - `idx_x`, `idx_y`, `idx_z`: per-axis wrapped-index scratch (length `M_G`).
 - `Y1::T`, `Y2::T`, `Y3::T`: the particle position, folded into `[0, L_i)`.
@@ -80,10 +73,9 @@ calibration). For `k ∈ 1:M_G` it writes, per axis:
 - `nothing`. The nine scratch vectors are overwritten in place.
 
 # Notes
-Preconditions (caller-guaranteed, so the loop is `@inbounds`): the nine scratch
-vectors have length `M_G`; `half_M_G = M_G ÷ 2`; `num_grid_points` holds
-`(M_x, M_y, M_z)`; the position has been folded into `[0, L_i)` by
-`wrap_positions!`.
+Preconditions (caller-guaranteed, so the loop is `@inbounds`): the nine scratch vectors have
+length `M_G`; `half_M_G = M_G ÷ 2`; `num_grid_points` holds `(M_x, M_y, M_z)`; the position
+has been folded into `[0, L_i)` by `wrap_positions!`.
 
 See `spec/force-spreading.md` and `spec/interpolation.md`.
 """

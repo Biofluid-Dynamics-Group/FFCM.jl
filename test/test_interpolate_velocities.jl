@@ -6,13 +6,13 @@ using StaticArrays
 using StructArrays: components
 
 @testset "Interpolation is the discrete adjoint of spreading (J = h³ Sᵀ)" begin
-    # The mobility M^VF = J·L⁻¹·J† is positive-definite only because the
+    # The mobility M^VF = J⋅L⁻¹⋅J† is positive-definite only because the
     # interpolation operator J is the exact discrete transpose of the
     # spreading operator J†, scaled by the trapezoidal weight h³
     # (paper §3). Concretely, for any grid field `u` and
     # any particle/component unit vector `e_{n,c}`:
     #
-    #   ⟨interpolate(u), e_{n,c}⟩ = h³ · ⟨u, spread(e_{n,c})⟩.
+    #   ⟨interpolate(u), e_{n,c}⟩ = h³ ⋅ ⟨u, spread(e_{n,c})⟩.
     #
     # `spread(e_{n,c})` puts a unit force on particle `n` in direction `c`,
     # so force_density component `c` equals Δ̃_n(x_g) and the others vanish;
@@ -23,8 +23,8 @@ using StructArrays: components
         N = 3
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -74,8 +74,8 @@ end
         N = 5
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -108,8 +108,8 @@ end
 
         ref = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -138,8 +138,8 @@ end
         M = Int32(8)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -194,8 +194,8 @@ end
         N = 4
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )
@@ -228,15 +228,15 @@ end
 end
 
 @testset "Interpolation is linear in the flow field" begin
-    # J̃[α u₁ + β u₂] = α·J̃[u₁] + β·J̃[u₂].
+    # J̃[α u₁ + β u₂] = α⋅J̃[u₁] + β⋅J̃[u₂].
     for T in (Float32, Float64)
         L = (T(8), T(8), T(8))
         M = Int32(16)
         N = 2
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -294,8 +294,8 @@ end
         M = Int32(16)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )
@@ -332,7 +332,7 @@ end
 end
 
 @testset "Σ = σ collapses interpolation to the standard-FCM Gaussian average" begin
-    # Σ_over_σ = 1 ⇒ σ²_minus_Σ² = 0 ⇒ a₀ = 1, a₂ = 0 ⇒ Δ̃_n = Δ_n. The particle
+    # kernel_widths_ratio = 1 ⇒ σ²_minus_Σ² = 0 ⇒ a₀ = 1, a₂ = 0 ⇒ Δ̃_n = Δ_n. The particle
     # sits at the box centre and the M_G³ stencil covers the whole grid, so
     # the gather matches the closed-form plain-Gaussian volume average at
     # every grid point.
@@ -341,8 +341,8 @@ end
         M = Int32(16)
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = 1,
-            Σ_over_σ = T(1),
-            μ = T(1),
+            kernel_widths_ratio = T(1),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 16,
         )
@@ -384,7 +384,7 @@ end
 end
 
 @testset "Assembled mobility M^VF is symmetric (spread/solve/interpolate adjoint)" begin
-    # M^VF = h³·(SP)ᵀ·L⁻¹·(SP) is symmetric positive-definite because L⁻¹
+    # M^VF = h³⋅(SP)ᵀ⋅L⁻¹⋅(SP) is symmetric positive-definite because L⁻¹
     # is and interpolation is the transpose of spreading. Symmetry test:
     # Fₐᵀ (M Fᵦ) = Fᵦᵀ (M Fₐ) for arbitrary force vectors.
     for T in (Float32, Float64)
@@ -393,8 +393,8 @@ end
         N = 4
         config = FFCMConfig{T}(;
             L = L, R_c = T(1), N = N,
-            Σ_over_σ = T(2),
-            μ = T(1),
+            kernel_widths_ratio = T(2),
+            viscosity = T(1),
             num_grid_points = (M, M, M),
             M_G = 8,
         )

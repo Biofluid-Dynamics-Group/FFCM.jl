@@ -9,10 +9,10 @@ const _DEFAULT_KWARGS = (;
     L = (4.0, 4.0, 4.0),
     R_c = 1.0,
     N = 10,
-    Σ_over_σ = 2.0,
+    kernel_widths_ratio = 2.0,
     num_grid_points = (Int32(8), Int32(8), Int32(8)),
     M_G = 8,
-    μ = 1.0,
+    viscosity = 1.0,
 )
 
 @testset "Hydrodynamic radius defaults to one (unit-radius convention)" begin
@@ -31,18 +31,18 @@ end
     @test config.σ ≈ 1.0 / sqrt(π)
 end
 
-@testset "Modified-kernel width Σ = (Σ/σ)·σ from the user-supplied ratio (paper §5)" begin
-    config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., Σ_over_σ = 2.5)
+@testset "Modified-kernel width Σ = (Σ/σ)⋅σ from the user-supplied ratio (paper §5)" begin
+    config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., kernel_widths_ratio = 2.5)
     @test config.Σ ≈ 2.5 * config.σ
 end
 
 @testset "Σ/σ ≥ 1 is required; the equality case is the standard-FCM degenerate limit" begin
     # Degenerate limit must be admissible.
-    config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., Σ_over_σ = 1.0)
+    config = FFCMConfig{Float64}(; _DEFAULT_KWARGS..., kernel_widths_ratio = 1.0)
     @test config.Σ ≈ config.σ
     # Below 1 is rejected (paper requires Σ > σ for the speed-up).
     @test_throws ArgumentError FFCMConfig{Float64}(;
-        _DEFAULT_KWARGS..., Σ_over_σ = 0.5,
+        _DEFAULT_KWARGS..., kernel_widths_ratio = 0.5,
     )
 end
 
@@ -148,10 +148,10 @@ end
         L = (4.0f0, 4.0f0, 4.0f0),
         R_c = 1.0f0,
         N = 10,
-        Σ_over_σ = 2.0f0,
+        kernel_widths_ratio = 2.0f0,
         num_grid_points = (Int32(8), Int32(8), Int32(8)),
         M_G = 8,
-        μ = 1.0f0,
+        viscosity = 1.0f0,
     )
     @test config.σ ≈ 1.0f0 / sqrt(Float32(π))
     @test config.Σ ≈ 2.0f0 * config.σ

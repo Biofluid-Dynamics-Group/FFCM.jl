@@ -32,7 +32,7 @@ L_z = T(10)
 μ = T(1)  # Viscosity
 
 R_c = T(1)  # Cutoff radius
-Σ_over_σ = T(2)  # FFCM splitting parameter
+kernel_widths_ratio = T(2)  # FFCM splitting parameter
 
 Y = T[9.3 4.1 -0.4 4.0; 4.0 4.2 4.0 9.9; 4.0 4.0 4.0 4.0]  # Positions 3xN
 F = T[0.5 -0.3 0.2 0.1; -0.1 0.4 0.0 0.3; 0.2 0.1 0.7 -0.5]  # Forces 3xN
@@ -45,8 +45,8 @@ config = FFCMConfig{T}(
     L = (L_x, L_y, L_z),
     R_c = R_c,
     N = N,
-    Σ_over_σ = Σ_over_σ,
-    μ = μ,
+    kernel_widths_ratio = Σ_over_σ,
+    viscosity = μ,
     num_grid_points = (num_points, num_points, num_points),
     M_G = M_G
 )
@@ -73,4 +73,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## LLM assistance
 
-This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus` and `claude-4.6-sonnet`.
+This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus` and `claude-4.6-sonnet` in code generation, test generation, architectural decision-making and documentation.

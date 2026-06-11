@@ -12,9 +12,9 @@ using FFCM: _build_cell_list_kernel!, _gather_particles_kernel!,
     original_index = Vector{Int32}(undef, 4)
     cell_start = Vector{Int32}(undef, 3)
     cell_end = Vector{Int32}(undef, 3)
-    next_free_slot = Vector{Int32}(undef, 3)
+    counting_sort_scratch = Vector{Int32}(undef, 3)
     _build_cell_list_kernel!(
-        original_index, cell_start, cell_end, next_free_slot, cell_hash,
+        original_index, cell_start, cell_end, counting_sort_scratch, cell_hash,
     )
     sorted_hashes = cell_hash[original_index]
     @test issorted(sorted_hashes)
@@ -26,9 +26,9 @@ end
     original_index = Vector{Int32}(undef, 4)
     cell_start = Vector{Int32}(undef, 3)
     cell_end = Vector{Int32}(undef, 3)
-    next_free_slot = Vector{Int32}(undef, 3)
+    counting_sort_scratch = Vector{Int32}(undef, 3)
     _build_cell_list_kernel!(
-        original_index, cell_start, cell_end, next_free_slot, cell_hash,
+        original_index, cell_start, cell_end, counting_sort_scratch, cell_hash,
     )
     # Every slot in a cell's range belongs to that cell, and the ranges
     # partition the sorted slots 1:N with no gaps or overlaps.
@@ -48,9 +48,9 @@ end
     original_index = Vector{Int32}(undef, 4)
     cell_start = Vector{Int32}(undef, 3)
     cell_end = Vector{Int32}(undef, 3)
-    next_free_slot = Vector{Int32}(undef, 3)
+    counting_sort_scratch = Vector{Int32}(undef, 3)
     _build_cell_list_kernel!(
-        original_index, cell_start, cell_end, next_free_slot, cell_hash,
+        original_index, cell_start, cell_end, counting_sort_scratch, cell_hash,
     )
     @test cell_end[2] < cell_start[2]               # cell 1: empty range
     @test isempty(cell_start[2]:cell_end[2])
@@ -63,9 +63,9 @@ end
     original_index = Vector{Int32}(undef, 5)
     cell_start = Vector{Int32}(undef, 2)
     cell_end = Vector{Int32}(undef, 2)
-    next_free_slot = Vector{Int32}(undef, 2)
+    counting_sort_scratch = Vector{Int32}(undef, 2)
     _build_cell_list_kernel!(
-        original_index, cell_start, cell_end, next_free_slot, cell_hash,
+        original_index, cell_start, cell_end, counting_sort_scratch, cell_hash,
     )
     @test original_index[cell_start[1]:cell_end[1]] == Int32[1, 3, 5]
     @test original_index[cell_start[2]:cell_end[2]] == Int32[2, 4]

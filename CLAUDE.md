@@ -18,7 +18,7 @@ Stokes equation. This can be the Stokes solution to a problem of colloidal suspe
 The package exposes a plug-and-play mobility operator
 
 ```julia
-mobility!(V, config, Y, F)   # Y, F: 3×N arrays; particles have unit radius
+mobility!(V, config, Y, F)   # Y, F: 3xN arrays; particles have unit radius
 ```
 
 with two backends:
@@ -71,7 +71,7 @@ allocation-free and the GPU backend hides host-device traffic from callers.
 
 7. **Every documented precondition is enforced.** If a docstring or
    `spec/` contract states a precondition (`M_G ≥ 2`,
-   `M_G ≤ min(num_grid_points)`, `Y` is `3×N`, `R_c ≤ min(L)/2`), the
+   `M_G ≤ min(num_grid_points)`, `Y` is `3xN`, `R_c ≤ min(L)/2`), the
    cold-path constructor or the hot-path entry validates it. A
    precondition that the code relies on (especially anything guarded by
    `@inbounds` or asserted by `@simd`) but does not check is a bug, not a

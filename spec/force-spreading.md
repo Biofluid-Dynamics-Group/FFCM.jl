@@ -78,7 +78,7 @@ $$
 j_i = \operatorname{round}\!\bigl(Y_{n,i} / h\bigr)
 \qquad \text{(Julia: `round(Int32, Y/h, RoundNearestTiesToEven)`)} .
 $$
-The stencil grid coordinates on axis $i$ are $x^{(s)}_i = \bigl(j_i - \lfloor M_G/2 \rfloor + s\bigr)h$ for $s = 0, \dots, M_G - 1$, and the corresponding periodic grid index is $\bigl(j_i - \lfloor M_G/2 \rfloor + s\bigr) \bmod M_i$, mapped to 1-based as `mod(·, M_i) + 1`. For odd $M_G$ the stencil is symmetric about $j_i$; for even $M_G$ it covers $\lfloor M_G/2 \rfloor$ points below $j_i$ and $\lceil M_G/2 \rceil - 1$ above. The nearest-grid-point anchor is an implementation convention (matching the reference implementation); the $(M_G, \Sigma/h)$ accuracy calibration it serves is given in §5 (Table 1 and Fig. 1(a)).
+The stencil grid coordinates on axis $i$ are $x^{(s)}_i = \bigl(j_i - \lfloor M_G/2 \rfloor + s\bigr)h$ for $s = 0, \dots, M_G - 1$, and the corresponding periodic grid index is $\bigl(j_i - \lfloor M_G/2 \rfloor + s\bigr) \bmod M_i$, mapped to 1-based as `mod(⋅, M_i) + 1`. For odd $M_G$ the stencil is symmetric about $j_i$; for even $M_G$ it covers $\lfloor M_G/2 \rfloor$ points below $j_i$ and $\lceil M_G/2 \rceil - 1$ above. The nearest-grid-point anchor is an implementation convention (matching the reference implementation); the $(M_G, \Sigma/h)$ accuracy calibration it serves is given in §5 (Table 1 and Fig. 1(a)).
 
 ### The limit $\Sigma = \sigma$
 
@@ -301,14 +301,14 @@ the cuFCM convention.
 
 | Facet | cuFCM | This package | Decision |
 |---|---|---|---|
-| Grid memory layout | SoA per component: three linear `myCufftReal*` buffers `hx, hy, hz`, `ind = ix + iy·nx + iz·nx·ny`. | `force_density::StructArray{SVector{3, T}, 3}` over three `Array{T, 3}`. | **Adopt** SoA, wrapped for a per-grid-point `SVector{3, T}` API; byte-compatible with cuFCM for parity, stride-1 along $i_x$. |
+| Grid memory layout | SoA per component: three linear `myCufftReal*` buffers `hx, hy, hz`, `ind = ix + iy⋅nx + iz⋅nx⋅ny`. | `force_density::StructArray{SVector{3, T}, 3}` over three `Array{T, 3}`. | **Adopt** SoA, wrapped for a per-grid-point `SVector{3, T}` API; byte-compatible with cuFCM for parity, stride-1 along $i_x$. |
 | Stencil anchoring | `xg = my_rint(Y/dx) − ngdh + (i mod ngd)`, `ngdh = ngd/2`. | Identical: $j_i = \operatorname{round}(Y_{n,i}/h)$, stencil $j_i - \lfloor M_G/2\rfloor + s$. | **Adopt** — nearest-anchoring minimises truncation for fixed $M_G$. |
-| Periodic wrap | `xg − nx·floor(xg/nx)`. | `mod(j_x − ⌊M_G/2⌋ + s, M_x)`. | **Keep** — semantically identical. |
-| Normalisation | `Anorm = 1/√(2π·Σ²)` per axis; 3-D as `Anorm³`. | Identical (`inv_norm`). | **Keep**. |
-| Polynomial coefficients | `temp2 = ½·pdmag/Σ²`, `temp3 = temp2/Σ²`, `temp4 = 3·temp2`, `pdmag = σ²−Σ²`; factor `(1 + temp3·r² − temp4)`. | $a_0 = 1 − \frac{3(\sigma^2-\Sigma^2)}{2\Sigma^2}$, $a_2 = \frac{\sigma^2-\Sigma^2}{2\Sigma^4}$. | **Keep** — algebraically identical; named after the closed form. |
+| Periodic wrap | `xg − nx⋅floor(xg/nx)`. | `mod(j_x − ⌊M_G/2⌋ + s, M_x)`. | **Keep** — semantically identical. |
+| Normalisation | `Anorm = 1/√(2π⋅Σ²)` per axis; 3-D as `Anorm³`. | Identical (`inv_norm`). | **Keep**. |
+| Polynomial coefficients | `temp2 = ½⋅pdmag/Σ²`, `temp3 = temp2/Σ²`, `temp4 = 3⋅temp2`, `pdmag = σ²−Σ²`; factor `(1 + temp3⋅r² − temp4)`. | $a_0 = 1 − \frac{3(\sigma^2-\Sigma^2)}{2\Sigma^2}$, $a_2 = \frac{\sigma^2-\Sigma^2}{2\Sigma^4}$. | **Keep** — algebraically identical; named after the closed form. |
 | Per-particle precompute | shared-mem `gaussx/y/z`, `xdis/ydis/zdis`, `indx/y/z`, grad-Gaussian (rotation), scalars. | `gaussian_*`, `r²_*`, `idx_*`, length $M_G$. Stores $r^2_i = x_i^2$ rather than signed `xdis`. | **Adopt** the pattern; store $r^2$ directly (one fewer multiply per inner iteration). |
 | Scatter into grid | `atomicAdd(&fx[ind], …)` for the many-to-one race. | Plain `fx[i_x, i_y, i_z] += …` (single-threaded CPU). | **Keep** for the MVP; threading needs atomics or thread-local accumulators. |
-| Particle iteration | one CUDA block per particle; `Y[3·np + k]` from raw arrays (the sort index is a filter, not an indirection). | serial loop over sorted slots; reads materialised `Y_sorted`/`F_sorted`. | **Keep** — step 2 paid the gather; consecutive sorted particles give cache locality. |
+| Particle iteration | one CUDA block per particle; `Y[3⋅np + k]` from raw arrays (the sort index is a filter, not an indirection). | serial loop over sorted slots; reads materialised `Y_sorted`/`F_sorted`. | **Keep** — step 2 paid the gather; consecutive sorted particles give cache locality. |
 | Dipole / torque / rotation | `rotation == 1` branch spreads $\boldsymbol{H}\nabla\Delta$. | none — force-only $\mathcal{M}^{\mathcal{V}\mathcal{F}}$. | **Out of scope** for the force-only operator. |
 | `USE_REGULARFCM` mode | compile-time branch with $\Sigma = \sigma$, skips the polynomial. | no flag; $\frac{\Sigma}{\sigma} = 1$ collapses the polynomial naturally. | **Subsume via the $\Sigma = \sigma$ limit** (test 10). |
 | Isotropic `dx` | scalar `Real dx`. | scalar `h`; validated isotropic at construction. | **Keep**. |
