@@ -84,6 +84,16 @@ allocation-free and the GPU backend hides host-device traffic from callers.
    Julia-naive reader can follow; types, performance notes, and cuFCM
    comparisons live in an "Implementation notes" appendix at the end.
 
+9. **Docstrings say what the function does.** A body that states the
+   function's job (with the paper citation and the `spec/*.md` pointer
+   where one exists), then `# Arguments` and `# Returns` sections
+   wherever possible — each entry gives at least the type and/or size
+   plus any real contract (valid range, units, ordering). Type/size
+   information lives in those sections, not in the body. No boilerplate
+   guarantees ("allocation-free", "type-stable on `T`") and no
+   self-justifying notes; extra notes survive only where they aid the
+   reader — e.g. the precondition lists that justify `@inbounds`.
+
 ## 3. Design boundaries
 
 The FFCM state object is called `config` (e.g. `FFCMConfig`). It owns
@@ -149,6 +159,13 @@ linear map, without a separate adapter at the call site.
   SIMD-over-particles. Flat-vector adapters live at LinAlg API
   boundaries (e.g. `mul!`). Specific layout choices and the cost of any
   AoS↔SoA shuffles belong in the relevant `spec/*.md` file.
+- **SciML performance practices**
+  (<https://github.com/SciML/SciMLStyle>) apply where this section does
+  not already cover them: function barriers around unavoidable type
+  instability, `let`-block rebinding to avoid boxed closure captures,
+  and no splatting of long argument lists in hot code. This import is
+  performance-only — syntax, formatting, and docstrings stay Blue per
+  §8; do not adopt SciML aesthetic or docstring conventions.
 
 ## 5. Tests
 
@@ -207,11 +224,15 @@ file names, or class layout into our code.
 - Don't add a new public API symbol without a `spec/` document and a
   failing test that drove the implementation (§5).
 - Don't generate docs that claim functionality that isn't tested.
+- Don't reference CLAUDE.md or any other agent/process file (plan files,
+  changelogs, local instructions) from `src/`, `test/`, or `spec/`.
+  Shipped artefacts cite the paper or `spec/`; the code stands on its
+  own.
 
 ## 8. Style
 
 - Use [Blue style](https://github.com/JuliaDiff/BlueStyle): 92-character line
-  limit, 4-space indent, trailing commas on multi-line collections and calls.
+  limit, 4-space indent.
 - When a function call or signature would exceed 92 characters, wrap it using
   the **first** of these stages that fits. Do not skip stages.
 
