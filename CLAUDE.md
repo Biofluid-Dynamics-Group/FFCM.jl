@@ -182,16 +182,19 @@ after the implementation can only confirm what the code does; the
 failing-test-first discipline forces the contract to be written down
 before the implementation biases it.
 
-**Test taxonomy** (four buckets under `test/`):
+**Test taxonomy** (three buckets under `test/`; `runtests.jl` and the
+shared fixtures in `test_utilities.jl` stay at the top level):
 
-- `unit/` — small, focused checks on individual functions and types.
 - `accuracy/` — paper-derived or analytical correctness tests at the
-  documented tolerance.
-- `api/` — boundary checks: allocation count via
-  `BenchmarkTools.@ballocated`, type stability via `Test.@inferred`, and
-  method ambiguities / unbound type parameters / stale `[deps]` via
-  **Aqua.jl**.
-- `cuda/` — CPU↔CUDA parity tests, only run when CUDA is loadable.
+  documented tolerance, one file per pipeline step plus the assembled
+  operator.
+- `api/` — hot-path boundary checks: allocation count via
+  `BenchmarkTools.@ballocated`, type stability via `Test.@inferred`.
+- `hygiene/` — whole-package audits: **Aqua.jl** (method ambiguities,
+  unbound type parameters, stale `[deps]`), **JET.jl** call-graph
+  inference, and the exported-surface check.
+- `cuda/` — CPU↔CUDA parity tests; added when the CUDA backend lands,
+  only run when CUDA is loadable.
 
 `Aqua.jl` audits package hygiene; **JET.jl** audits dispatch and
 inference. Both are test dependencies.

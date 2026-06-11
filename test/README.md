@@ -1,23 +1,23 @@
 # Test suite guide
 
-This directory is **flat**: every file sits directly under `test/`, included
-by `runtests.jl` in pipeline order. Three groups share the space:
+Tests are grouped into three subdirectories, included by `runtests.jl` in
+pipeline order (accuracy and API files interleave step by step):
 
-- **Accuracy files** (`test_<step>.jl`) pin physical and mathematical
+- **`accuracy/`** (`test_<step>.jl`) pins physical and mathematical
   behavior against an oracle that is independent of the implementation.
-- **API files** (`test_<step>_api.jl`) pin the two machine-level guarantees
+- **`api/`** (`test_<step>_api.jl`) pins the two machine-level guarantees
   of the hot path: type stability (`Test.@inferred`) and zero heap
   allocations (`BenchmarkTools.@ballocated` with `samples=1 evals=1`; the
   counts are deterministic after warmup, so one sample suffices). They test
   the step *entry points* only — a zero-allocation entry bounds its callees,
   and JET walks inference into them — so internal kernels are deliberately
   not exercised here.
-- **Hygiene files** (`test_aqua.jl`, `test_jet.jl`, `test_exported_surface.jl`)
-  audit the package as a whole.
+- **`hygiene/`** (`test_aqua.jl`, `test_jet.jl`, `test_exported_surface.jl`)
+  audits the package as a whole.
 
-Shared fixtures live in `test_utilities.jl` (standard config builder,
-clustered particle cloud, near-zero tolerance), included before everything
-else.
+Shared fixtures live in `test_utilities.jl`, directly under `test/`
+(standard config builder, clustered particle cloud, near-zero tolerance),
+included before everything else.
 
 ## Tolerance convention
 
@@ -31,24 +31,24 @@ document their own physical tolerance inline.
 
 | File | What it pins | Oracle / justification |
 | --- | --- | --- |
-| `test_cell_geometry.jl` | Cell counts `max(L_i/R_c, 3)`, sizes, buffer shapes, constructor rejections | Paper §4 cell-list formula, hand-computed |
-| `test_wrap_positions.jl` | `[0, L)` fold: boundary, idempotence, integer-period invariance | Closed-form `mod` |
-| `test_assign_cells_kernel.jl` | Hash linearisation `x + (y + z⋅m_y)⋅m_x`, upper-edge clamp, hash bounds | Hand-computed hashes |
-| `test_assign_cells.jl` | Entry point delegates to the kernel on config fields and returns the config buffer | Kernel called directly |
-| `test_sort_particles_by_cell.jl` | Counting sort: ordering, cell bracketing, stability, gather permutation | Permutation identities |
-| `test_fcm_grid.jl` | Constructor invariants: `σ = a/√π`, `Σ = (Σ/σ)⋅σ`, isotropic `h`, `2 ≤ M_G ≤ min(M)`, SoA buffers | Paper §2/§3/§5 relations |
-| `test_modified_kernel_coefficients.jl` | Eq. (22) expansion scalars; `Σ = σ` degenerate limit | Independent algebra of the same expansion |
-| `test_spread_forces.jl` | Spread matches the closed-form modified kernel; anchor convention; force conservation; first moment; translation; linearity; `Σ = σ` collapse | Paper §3 eq. (22) closed form; integral identities |
-| `test_stokes_solve.jl` | Wavenumber layout; `k = 0` gauge fix; per-mode incompressibility; analytical single mode; linearity; translation/reflection equivariance; `1/μ` scaling | Analytical Fourier solutions and symmetries |
-| `test_interpolate_velocities.jl` | Adjoint identity `J = h³⋅Sᵀ`; original-order output; closed-form gather; constant-flow limit; linearity; translation; assembled-operator symmetry | Paper §3; closed-form sums |
-| `test_correct_velocities.jl` | Pair correction `A⋅I + B⋅xxᵀ` and self term; `Σ = σ` zero limit; symmetry; linearity; translation/periodic invariance; accumulation into `V` | Full-tensor difference-of-mobilities (paper §2 eqs. (8)–(10), (16)–(17); §3 eqs. (30)–(31); App. B eq. (B.1)) — an algebraically distinct route. Deliberately tests the internal scalars too: they *are* the algebraic collapse under test |
-| `test_mobility.jl` | Driver contracts: caller arrays untouched, `DimensionMismatch` guards, linearity, SPD, `mul!` (3- and 5-arg), `M * F`, `issymmetric`/`isposdef` | Operator identities; spec/mobility.md |
-| `test_mobility_properties.jl` | Linearity, symmetry, positivity across seeded-random domains, grids, widths, and out-of-domain positions | Exact operator identities, reproducible RNG |
-| `test_single_sphere_mobility.jl` | **Headline**: end-to-end self-mobility against the reciprocal-lattice regularised-Stokeslet sum; Σ-independence of the assembled operator | Paper §3 eqs. (32)–(33) lattice sum (`Float64` only: the bound is grid-truncation, which `Float32` round-off would mask) |
-| `test_*_api.jl` (x7) | `@inferred` + zero allocations for each step entry point and the assembled operator | Hot-path contract tables in each `spec/*.md` |
-| `test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | `spec/mobility.md` two-phase public surface |
-| `test_aqua.jl` | Package hygiene | Aqua.jl (below) |
-| `test_jet.jl` | Whole-call-graph inference and dispatch health | JET.jl (below) |
+| `accuracy/test_cell_geometry.jl` | Cell counts `max(L_i/R_c, 3)`, sizes, buffer shapes, constructor rejections | Paper §4 cell-list formula, hand-computed |
+| `accuracy/test_wrap_positions.jl` | `[0, L)` fold: boundary, idempotence, integer-period invariance | Closed-form `mod` |
+| `accuracy/test_assign_cells_kernel.jl` | Hash linearisation `x + (y + z⋅m_y)⋅m_x`, upper-edge clamp, hash bounds | Hand-computed hashes |
+| `accuracy/test_assign_cells.jl` | Entry point delegates to the kernel on config fields and returns the config buffer | Kernel called directly |
+| `accuracy/test_sort_particles_by_cell.jl` | Counting sort: ordering, cell bracketing, stability, gather permutation | Permutation identities |
+| `accuracy/test_fcm_grid.jl` | Constructor invariants: `σ = a/√π`, `Σ = (Σ/σ)⋅σ`, isotropic `h`, `2 ≤ M_G ≤ min(M)`, SoA buffers | Paper §2/§3/§5 relations |
+| `accuracy/test_modified_kernel_coefficients.jl` | Eq. (22) expansion scalars; `Σ = σ` degenerate limit | Independent algebra of the same expansion |
+| `accuracy/test_spread_forces.jl` | Spread matches the closed-form modified kernel; anchor convention; force conservation; first moment; translation; linearity; `Σ = σ` collapse | Paper §3 eq. (22) closed form; integral identities |
+| `accuracy/test_stokes_solve.jl` | Wavenumber layout; `k = 0` gauge fix; per-mode incompressibility; analytical single mode; linearity; translation/reflection equivariance; `1/μ` scaling | Analytical Fourier solutions and symmetries |
+| `accuracy/test_interpolate_velocities.jl` | Adjoint identity `J = h³⋅Sᵀ`; original-order output; closed-form gather; constant-flow limit; linearity; translation; assembled-operator symmetry | Paper §3; closed-form sums |
+| `accuracy/test_correct_velocities.jl` | Pair correction `A⋅I + B⋅xxᵀ` and self term; `Σ = σ` zero limit; symmetry; linearity; translation/periodic invariance; accumulation into `V` | Full-tensor difference-of-mobilities (paper §2 eqs. (8)–(10), (16)–(17); §3 eqs. (30)–(31); App. B eq. (B.1)) — an algebraically distinct route. Deliberately tests the internal scalars too: they *are* the algebraic collapse under test |
+| `accuracy/test_mobility.jl` | Driver contracts: caller arrays untouched, `DimensionMismatch` guards, linearity, SPD, `mul!` (3- and 5-arg), `M * F`, `issymmetric`/`isposdef` | Operator identities; spec/mobility.md |
+| `accuracy/test_mobility_properties.jl` | Linearity, symmetry, positivity across seeded-random domains, grids, widths, and out-of-domain positions | Exact operator identities, reproducible RNG |
+| `accuracy/test_single_sphere_mobility.jl` | **Headline**: end-to-end self-mobility against the reciprocal-lattice regularised-Stokeslet sum; Σ-independence of the assembled operator | Paper §3 eqs. (32)–(33) lattice sum (`Float64` only: the bound is grid-truncation, which `Float32` round-off would mask) |
+| `api/test_*_api.jl` (x7) | `@inferred` + zero allocations for each step entry point and the assembled operator | Hot-path contract tables in each `spec/*.md` |
+| `hygiene/test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | `spec/mobility.md` two-phase public surface |
+| `hygiene/test_aqua.jl` | Package hygiene | Aqua.jl (below) |
+| `hygiene/test_jet.jl` | Whole-call-graph inference and dispatch health | JET.jl (below) |
 
 ## Why JET and Aqua
 
