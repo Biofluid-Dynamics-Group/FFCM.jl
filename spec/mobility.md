@@ -136,6 +136,10 @@ list once for a fixed `Y` is a future optimisation, not part of this contract.
 The matrix-free marshalling is allocation-free: the flat↔matrix copies go through `copyto!`,
 which respects the column-major convention without a `reshape` allocation.
 
+The hot path is allocation-free for configs built with `fft_threads = 1` (the default):
+threaded FFT plans execute as spawned Julia tasks, which allocate per `stokes_solve!`
+call (see [stokes-solve.md](stokes-solve.md)).
+
 ## Verification
 
 - `test/test_mobility.jl` — the composition matches the six steps applied by hand; `Y` and

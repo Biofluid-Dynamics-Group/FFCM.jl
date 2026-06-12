@@ -1,6 +1,7 @@
 """
     FFCMConfig{T}(
-        ; L, R_c, N, a = T(1), kernel_widths_ratio, num_grid_points, M_G, viscosity
+        ; L, R_c, N, a = T(1), kernel_widths_ratio, num_grid_points, M_G, viscosity,
+        fft_planning = :measure, fft_threads = 1,
     ) -> FFCMConfig{T}
 
 Configuration of the Fast FCM mobility operator: the cell partition of the pairwise
@@ -30,6 +31,15 @@ the buffers this struct owns. `N` is fixed at construction — changing `N` requ
   point.
 - `viscosity::T`: the fluid dynamic viscosity (paper §2, Stokes momentum balance). Must be
   positive.
+- `fft_planning::Symbol = :measure`: the FFT planner effort, one of `:estimate`,
+  `:measure`, or `:patient`. The measuring efforts spend construction time (seconds at
+  large grids) searching for faster transforms for the repeated `stokes_solve!` calls of
+  a long solve; `:estimate` plans instantly from heuristics. The computed velocities are
+  independent of the effort to round-off.
+- `fft_threads::Integer = 1`: the execution thread count baked into the FFT plans. Must
+  be at least 1. Threaded plans execute as Julia tasks, which allocate per call: the
+  allocation-free hot path requires `fft_threads = 1`. The computed velocities match the
+  single-threaded result to round-off.
 
 # Returns
 - `FFCMConfig{T}`: the configuration `mobility!` operates on.
@@ -38,12 +48,21 @@ the buffers this struct owns. `N` is fixed at construction — changing `N` requ
 - `ArgumentError`: if `R_c ≤ 0`, any `L_i ≤ 0`, `R_c > min(L)/2`, `N ≤ 0`, `a ≠ T(1)`
   (non-unit radius not yet implemented), `kernel_widths_ratio < 1`, `M_G < 2`,
   `M_G > min(num_grid_points)`, any `num_grid_points` component `< 1`, the grid spacing is
-  anisotropic, or `viscosity ≤ 0`.
+  anisotropic, `viscosity ≤ 0`, `fft_planning` is not one of the three planner efforts,
+  or `fft_threads < 1`.
 
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`, `spec/force-spreading.md`, and
 `spec/stokes-solve.md`.
 """
-struct FFCMConfig{T <: AbstractFloat, GridField, SpectralField, FwdTransform, InvTransform}
+struct FFCMConfig{
+    T <: AbstractFloat,
+    GridField,
+    SpectralField,
+    StencilField,
+    StencilIndexField,
+    FwdTransform,
+    InvTransform,
+}
     L::NTuple{3, T}
     R_c::T
     num_cells::NTuple{3, Int32}
@@ -65,15 +84,9 @@ struct FFCMConfig{T <: AbstractFloat, GridField, SpectralField, FwdTransform, In
     h::T
     inv_h::T
     force_density::GridField
-    gaussian_x::Vector{T}
-    gaussian_y::Vector{T}
-    gaussian_z::Vector{T}
-    r²_x::Vector{T}
-    r²_y::Vector{T}
-    r²_z::Vector{T}
-    idx_x::Vector{Int32}
-    idx_y::Vector{Int32}
-    idx_z::Vector{Int32}
+    stencil_gaussian::StencilField
+    stencil_r²::StencilField
+    stencil_index::StencilIndexField
     μ::T
     fluid_velocity::GridField
     fluid_hat::SpectralField
@@ -108,6 +121,26 @@ function _wrap_wavevectors(M::Int32, L::T) where {T}
     return T[twoπ * (j ≤ M_half_plus_one ? T(j - 1) : T(j - 1 - M)) / L for j in 1:M]
 end
 
+"""
+    _fftw_planner_flag(fft_planning) -> UInt32
+
+Maps the public planner-effort name to the FFTW planner flag: `:estimate` to
+`FFTW.ESTIMATE`, `:measure` to `FFTW.MEASURE`, `:patient` to `FFTW.PATIENT`.
+
+# Arguments
+- `fft_planning::Symbol`: one of `:estimate`, `:measure`, `:patient` (validated by the
+  `FFCMConfig` constructor).
+
+# Returns
+- `UInt32`: the FFTW planner flag.
+
+See `spec/stokes-solve.md`.
+"""
+function _fftw_planner_flag(fft_planning::Symbol)
+    return fft_planning === :estimate ? ESTIMATE :
+           fft_planning === :measure ? MEASURE : PATIENT
+end
+
 function FFCMConfig{T}(;
     L::NTuple{3, T},
     R_c::T,
@@ -117,6 +150,8 @@ function FFCMConfig{T}(;
     num_grid_points::NTuple{3, Int32},
     M_G::Integer,
     viscosity::T,
+    fft_planning::Symbol = :measure,
+    fft_threads::Integer = 1,
 ) where {T <: AbstractFloat}
     R_c > zero(T) || throw(ArgumentError("R_c must be positive"))
     all(>(zero(T)), L) || throw(ArgumentError("L components must be positive"))
@@ -141,6 +176,13 @@ function FFCMConfig{T}(;
     ))
     viscosity > zero(T) || throw(ArgumentError(
         "viscosity must be positive; got $(viscosity)",
+    ))
+    fft_planning in (:estimate, :measure, :patient) || throw(ArgumentError(
+        "fft_planning must be :estimate, :measure, or :patient; got " *
+        ":$(fft_planning)",
+    ))
+    fft_threads ≥ 1 || throw(ArgumentError(
+        "fft_threads must be at least 1; got $(fft_threads)",
     ))
 
     num_cells = ntuple(i -> max(floor(Int32, L[i] / R_c), Int32(3)), 3)
@@ -173,31 +215,37 @@ function FFCMConfig{T}(;
     inv_h = one(T) / h
 
     M_x, M_y, M_z = num_grid_points
-    fx = zeros(T, M_x, M_y, M_z)
-    fy = zeros(T, M_x, M_y, M_z)
-    fz = zeros(T, M_x, M_y, M_z)
+    # The grid buffers are allocated unzeroed and zeroed only after the FFT
+    # plans are built on them: the measuring planner levels execute candidate
+    # transforms on the input array, overwriting its contents
+    # (spec/stokes-solve.md).
+    fx = Array{T, 3}(undef, M_x, M_y, M_z)
+    fy = Array{T, 3}(undef, M_x, M_y, M_z)
+    fz = Array{T, 3}(undef, M_x, M_y, M_z)
     force_density = StructArray{SVector{3, T}}((fx, fy, fz))
 
     M_G_i32 = Int32(M_G)
-    gaussian_x = Vector{T}(undef, M_G_i32)
-    gaussian_y = Vector{T}(undef, M_G_i32)
-    gaussian_z = Vector{T}(undef, M_G_i32)
-    r²_x = Vector{T}(undef, M_G_i32)
-    r²_y = Vector{T}(undef, M_G_i32)
-    r²_z = Vector{T}(undef, M_G_i32)
-    idx_x = Vector{Int32}(undef, M_G_i32)
-    idx_y = Vector{Int32}(undef, M_G_i32)
-    idx_z = Vector{Int32}(undef, M_G_i32)
+    stencil_gaussian = StructArray{SVector{3, T}}((
+        Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32),
+    ))
+    stencil_r² = StructArray{SVector{3, T}}((
+        Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32),
+    ))
+    stencil_index = StructArray{SVector{3, Int32}}((
+        Vector{Int32}(undef, M_G_i32),
+        Vector{Int32}(undef, M_G_i32),
+        Vector{Int32}(undef, M_G_i32),
+    ))
 
-    ux = zeros(T, M_x, M_y, M_z)
-    uy = zeros(T, M_x, M_y, M_z)
-    uz = zeros(T, M_x, M_y, M_z)
+    ux = Array{T, 3}(undef, M_x, M_y, M_z)
+    uy = Array{T, 3}(undef, M_x, M_y, M_z)
+    uz = Array{T, 3}(undef, M_x, M_y, M_z)
     fluid_velocity = StructArray{SVector{3, T}}((ux, uy, uz))
 
     fft_M_x = M_x ÷ Int32(2) + Int32(1)
-    fh_x = zeros(Complex{T}, fft_M_x, M_y, M_z)
-    fh_y = zeros(Complex{T}, fft_M_x, M_y, M_z)
-    fh_z = zeros(Complex{T}, fft_M_x, M_y, M_z)
+    fh_x = Array{Complex{T}, 3}(undef, fft_M_x, M_y, M_z)
+    fh_y = Array{Complex{T}, 3}(undef, fft_M_x, M_y, M_z)
+    fh_z = Array{Complex{T}, 3}(undef, fft_M_x, M_y, M_z)
     fluid_hat = StructArray{SVector{3, Complex{T}}}((fh_x, fh_y, fh_z))
 
     # Fourier wavevectors in FFTW's layout. The transform keeps only the
@@ -207,13 +255,27 @@ function FFCMConfig{T}(;
     k_y = _wrap_wavevectors(M_y, L[2])
     k_z = _wrap_wavevectors(M_z, L[3])
 
-    forward_fourier_transform = plan_rfft(fx)
-    inverse_fourier_transform = plan_brfft(fh_x, Int(M_x))
+    planner_flag = _fftw_planner_flag(fft_planning)
+    forward_fourier_transform = plan_rfft(
+        fx; flags = planner_flag, num_threads = Int(fft_threads),
+    )
+    inverse_fourier_transform = plan_brfft(
+        fh_x, Int(M_x); flags = planner_flag, num_threads = Int(fft_threads),
+    )
+
+    for buffer in (fx, fy, fz, ux, uy, uz)
+        fill!(buffer, zero(T))
+    end
+    for buffer in (fh_x, fh_y, fh_z)
+        fill!(buffer, zero(Complex{T}))
+    end
 
     return FFCMConfig{
         T,
         typeof(force_density),
         typeof(fluid_hat),
+        typeof(stencil_gaussian),
+        typeof(stencil_index),
         typeof(forward_fourier_transform),
         typeof(inverse_fourier_transform),
     }(
@@ -238,15 +300,9 @@ function FFCMConfig{T}(;
         h,
         inv_h,
         force_density,
-        gaussian_x,
-        gaussian_y,
-        gaussian_z,
-        r²_x,
-        r²_y,
-        r²_z,
-        idx_x,
-        idx_y,
-        idx_z,
+        stencil_gaussian,
+        stencil_r²,
+        stencil_index,
         viscosity,
         fluid_velocity,
         fluid_hat,

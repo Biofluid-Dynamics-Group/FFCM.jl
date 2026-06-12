@@ -110,6 +110,19 @@ the leading index $i_x = i_y = i_z = 1$, where the kernel applies the gauge fix.
 - `μ` $= \mu$ (`T`) — the fluid dynamic viscosity, required on `FFCMConfig`. Must satisfy
   $\mu > 0$. No default; viscosity is a physical quantity and should be an explicit caller
   decision.
+- `fft_planning` (`Symbol`, default `:measure`) — the FFT planner effort, one of
+  `:estimate`, `:measure`, or `:patient` (mapped to the corresponding FFTW planner
+  flags). Planner effort trades construction time for transform time: `:estimate` plans
+  immediately from heuristics; `:measure` and `:patient` time candidate algorithms on
+  the actual grid at construction (seconds to minutes at large grids) and can produce
+  faster plans for the many `stokes_solve!` calls of a long resistance solve. The
+  solution `fluid_velocity` is independent of the planner effort to round-off. Any other
+  value raises `ArgumentError`.
+- `fft_threads` (`Integer`, default `1`) — the execution thread count baked into the two
+  FFT plans at construction. Threaded plans execute as Julia tasks, which allocate per
+  call: the hot-path allocation-free guarantee is scoped to `fft_threads = 1`. Must be
+  at least 1, else `ArgumentError`. The solution matches the single-threaded result to
+  round-off (the task partition changes summation order only).
 
 The cold-path inputs from steps 1–3 (`L`, `R_c`, `N`, `a`, `Σ_over_σ`, `num_grid_points`,
 `M_G`) are unchanged.
@@ -128,8 +141,9 @@ The cold-path inputs from steps 1–3 (`L`, `R_c`, `N`, `a`, `Σ_over_σ`, `num_
 
 `FFCMConfig` carries extra type parameters for the two plan types.
 
-Cold-path validation (constructor addition): $\mu > 0$, else `ArgumentError`. All
-step-1–3 validation is retained.
+Cold-path validation (constructor addition): $\mu > 0$,
+`fft_planning ∈ (:estimate, :measure, :patient)`, and `fft_threads ≥ 1`, else
+`ArgumentError`. All step-1–3 validation is retained.
 
 ### Hot-path input (per `stokes_solve!` call)
 
@@ -182,6 +196,10 @@ The three force components share shape and type, so a single `forward_fourier_tr
 both $\hat{\boldsymbol{f}}$ and $\hat{\boldsymbol{u}}$: the projection is local in each
 Fourier point, so the in-place read-then-write at one index is race-free. The grids, the
 wavenumber vectors, and the two plans are built once by the `FFCMConfig` constructor.
+The constructor builds the plans on the freshly allocated grid buffers **before** zeroing
+them: FFTW's measuring planner levels evaluate candidate algorithms by executing them on
+the input array, overwriting its contents, so the plan-then-zero order guarantees that
+"all grid buffers are zero after construction" holds at every planner effort.
 
 | Phase | Allocations | Functions |
 |---|---|---|
@@ -198,9 +216,23 @@ The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
 - **One plan, applied three times.** The three components are independent arrays of the
   same shape, so one `plan_rfft` and one `plan_brfft` cover them; `mul!(out, plan, in)`
   per component is allocation-free once the plan exists.
-- **Plan flags.** Start with `FFTW.ESTIMATE` (no plan-time overhead, modest runtime cost)
-  and upgrade to `FFTW.MEASURE` only if a benchmark shows plan execution to be the
-  bottleneck — a benchmark concern, not a correctness one.
+- **Planner effort.** The default is `:measure`: on the benchmarked 64³/128³ grids the
+  measured plans run `stokes_solve!` 9–22 % faster than `:estimate` at both precisions,
+  for a one-time planning cost of ≈ 0.3 s (64³) to ≈ 1.3 s (128³) that amortises over
+  the repeated `stokes_solve!` calls of a resistance solve (see the benchmark suite for
+  current numbers on a given machine). Choose `:estimate` when construction latency
+  matters more than per-call speed — small grids, one-shot evaluations. Users can cache
+  planner results across sessions with FFTW's wisdom mechanism — `FFTW.import_wisdom`
+  before constructing the config, `FFTW.export_wisdom` after — with no FFCM
+  involvement.
+- **FFT threading.** `fft_threads > 1` bakes multi-threaded execution into both plans;
+  with the FFTW provider the transform body runs as spawned Julia tasks, so each
+  `stokes_solve!` call allocates task state — the allocation-free hot-path guarantee is
+  scoped to `fft_threads = 1`. The thread count is per-plan state: FFTW.jl
+  saves and restores the planner's thread setting internally, so construction leaves no
+  global FFTW state behind. With the MKL provider the threading is MKL-internal and the
+  allocation caveat differs. Whether threading pays is grid-size- and machine-dependent;
+  the `fft-threads` benchmark group measures it on the host at hand.
 - **`fluid_hat` reused for $\hat{\boldsymbol{f}}$ and $\hat{\boldsymbol{u}}$.** One
   Fourier buffer rather than two; the per-point-local projection makes the in-place
   transition safe.
@@ -265,6 +297,18 @@ End-to-end correctness for this step is established by the test suite.
 `test/test_jet.jl` — `JET.@test_call stokes_solve!`. `test/test_aqua.jl` — package hygiene
 (the FFTW dependency must surface cleanly). `test/test_fcm_grid.jl` — pins the new
 cold-path derived fields.
+
+`test/accuracy/test_fft_planning.jl` — the single-sphere periodic self-mobility is
+independent of the planner effort: `:estimate` and `:measure` configs both reproduce the
+lattice-sum reference, and their `mobility!` results agree to `sqrt(eps(T))` on the
+**first** call after construction (which would catch planner scribble surviving in a grid
+buffer); an unknown planner effort raises `ArgumentError`.
+
+`test/accuracy/test_fftw_threading.jl` — a threaded-plan config reproduces the
+single-thread reference: the same spread forces give the same `fluid_velocity` and the
+same `mobility!` velocities to `sqrt(eps(T))`; a non-positive thread count raises
+`ArgumentError`. `test/api/test_stokes_solve_api.jl` adds `@inferred stokes_solve!` on a
+threaded config (no allocation assertion: threaded execution allocates by design).
 
 Tolerances: tests 2–9 use `sqrt(eps(T))` (the discrete identities are exact to round-off);
 test 10 uses the paper truncation tolerance with a documented periodic-image cutoff.

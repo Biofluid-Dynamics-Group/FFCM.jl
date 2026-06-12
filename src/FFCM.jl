@@ -2,7 +2,7 @@ module FFCM
 
 using StaticArrays: SVector
 using StructArrays: StructArray, components
-using FFTW: plan_rfft, plan_brfft
+using FFTW: ESTIMATE, MEASURE, PATIENT, plan_rfft, plan_brfft
 using LinearAlgebra: dot
 using SpecialFunctions: erf
 
