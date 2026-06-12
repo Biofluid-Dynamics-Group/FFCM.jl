@@ -29,6 +29,9 @@ end
 # A small multi-particle configuration shared by the step and operator tests.
 # Grid and kernel widths follow the regime the accuracy tests use (h isotropic,
 # M_G < M); override any keyword for a test that needs a different geometry.
+# Tests pin the instant heuristic planner: the measured planning of the package
+# default buys per-call transform speed the suite does not need, and the
+# planner-effort contract has its own test (test_fft_planning.jl).
 function _standard_test_config(
     ::Type{T};
     N,
@@ -38,10 +41,13 @@ function _standard_test_config(
     Σ_over_σ = T(2),
     μ = T(1),
     R_c = T(1),
+    fft_planning = :estimate,
+    fft_threads = 1,
 ) where {T}
     return FFCMConfig{T}(;
         L = L, R_c = R_c, N = N, kernel_widths_ratio = Σ_over_σ, viscosity = μ,
-        num_grid_points = num_grid_points, M_G = M_G,
+        num_grid_points = num_grid_points, M_G = M_G, fft_planning = fft_planning,
+        fft_threads = fft_threads,
     )
 end
 
@@ -61,6 +67,24 @@ function _clustered_cloud(::Type{T}, N) where {T}
         F[3, n] = T(0.3) * n
     end
     return Y, F
+end
+
+# Reciprocal-lattice sum of the σ-regularised periodic Stokeslet self-mobility
+# (paper §3 equations (32)–(33), Fourier form), the true M^VF self-mobility a
+# single particle feels from its own periodic images. Independent of Σ. Shared
+# closed-form reference of the single-sphere end-to-end tests
+# (test_single_sphere_mobility.jl, test_fft_planning.jl).
+function _periodic_self_mobility_xx(σ::T, μ::T, Lx::T; n_max::Int = 15) where {T}
+    s = zero(T)
+    for nx in -n_max:n_max, ny in -n_max:n_max, nz in -n_max:n_max
+        (nx == 0 && ny == 0 && nz == 0) && continue
+        kx = T(2π * nx / Lx)
+        ky = T(2π * ny / Lx)
+        kz = T(2π * nz / Lx)
+        k² = kx * kx + ky * ky + kz * kz
+        s += exp(-σ^2 * k²) / (μ * k²) * (one(T) - kx * kx / k²)
+    end
+    return s / Lx^3
 end
 
 # Fills the config's sorted-particle buffers directly (bypassing steps 1–2)

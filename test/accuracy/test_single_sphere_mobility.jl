@@ -3,22 +3,6 @@ using FFCM
 using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!,
     spread_forces!, stokes_solve!, interpolate_velocities!, mobility!
 
-# Reciprocal-lattice sum of the σ-regularised periodic Stokeslet self-mobility
-# (paper §3 equations (32)–(33), Fourier form), the true M^VF self-mobility a single particle
-# feels from its own periodic images. Independent of Σ.
-function _periodic_self_mobility_xx(σ::T, μ::T, Lx::T; n_max::Int = 15) where {T}
-    s = zero(T)
-    for nx in -n_max:n_max, ny in -n_max:n_max, nz in -n_max:n_max
-        (nx == 0 && ny == 0 && nz == 0) && continue
-        kx = T(2π * nx / Lx)
-        ky = T(2π * ny / Lx)
-        kz = T(2π * nz / Lx)
-        k² = kx * kx + ky * ky + kz * kz
-        s += exp(-σ^2 * k²) / (μ * k²) * (one(T) - kx * kx / k²)
-    end
-    return s / Lx^3
-end
-
 @testset "Single-sphere periodic self-mobility (end-to-end, all five steps)" begin
     # Compose steps 1–5 (wrap → hash → sort → spread → solve → interpolate)
     # for one particle with unit x-force in the standard-FCM degenerate
@@ -59,8 +43,8 @@ end
 
     σ, μ, Lx = config.σ, config.μ, L[1]
     # n_max = 15 ⇒ e^{-σ²k²} ≈ e^{-44} at the truncation edge — far below
-    # round-off, so the lattice sum is converged. Same oracle the six-step test
-    # uses, so the closed-form reference lives in one place.
+    # round-off, so the lattice sum is converged. The closed-form reference is
+    # the shared oracle in test_utilities.jl.
     self_mobility_xx = _periodic_self_mobility_xx(σ, μ, Lx; n_max = 15)
 
     # Grid-resolution / stencil-truncation limited (≈ 9e-7 at this σ/h),

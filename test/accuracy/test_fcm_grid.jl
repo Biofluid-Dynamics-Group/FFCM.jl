@@ -124,23 +124,20 @@ end
     @test all(c -> size(c) == (8, 12, 16), components)
 end
 
-@testset "Per-particle stencil scratch vectors are sized to the kernel support M_G" begin
+@testset "Per-particle stencil scratch is sized to the kernel support M_G" begin
     # Grid bumped to 16³ so M_G = 10 stays within the per-axis grid bound; this
-    # test pins the scratch-vector sizing, which is independent of the grid.
+    # test pins the scratch sizing, which is independent of the grid.
     config = FFCMConfig{Float64}(;
         _DEFAULT_KWARGS...,
         num_grid_points = (Int32(16), Int32(16), Int32(16)),
         M_G = 10,
     )
-    @test length(config.gaussian_x) == 10
-    @test length(config.gaussian_y) == 10
-    @test length(config.gaussian_z) == 10
-    @test length(config.r²_x) == 10
-    @test length(config.r²_y) == 10
-    @test length(config.r²_z) == 10
-    @test length(config.idx_x) == 10
-    @test length(config.idx_y) == 10
-    @test length(config.idx_z) == 10
+    @test length(config.stencil_gaussian) == 10
+    @test length(config.stencil_r²) == 10
+    @test length(config.stencil_index) == 10
+    @test eltype(config.stencil_gaussian) == SVector{3, Float64}
+    @test eltype(config.stencil_r²) == SVector{3, Float64}
+    @test eltype(config.stencil_index) == SVector{3, Int32}
 end
 
 @testset "Cold-path validation works for Float32 as well as Float64" begin
