@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Pablo Zurita Soler <p.zurita23@imperial.ac.uk>", "Hang Su <hang.su16@imperial.ac.uk>"]
 
 [workspace]
-projects = ["test"]
+projects = ["test", "benchmark"]
 
 [deps]
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
