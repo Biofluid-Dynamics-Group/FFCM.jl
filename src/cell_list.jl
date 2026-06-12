@@ -24,11 +24,8 @@ See `spec/spatial-hashing.md`.
 function wrap_positions!(
     destination::AbstractMatrix{T}, source::AbstractMatrix{T}, L::NTuple{3, T},
 ) where {T}
-    @inbounds @simd for n in axes(source, 2)
-        destination[1, n] = mod(source[1, n], L[1])
-        destination[2, n] = mod(source[2, n], L[2])
-        destination[3, n] = mod(source[3, n], L[3])
-    end
+    # `L` broadcasts as a length-3 collection along the axis dimension.
+    destination .= mod.(source, L)
     return destination
 end
 

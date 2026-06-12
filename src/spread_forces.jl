@@ -27,15 +27,9 @@ function spread_forces!(config::FFCMConfig{T}) where {T}
         config.inv_h,
         config.num_grid_points,
         config.M_G,
-        config.gaussian_x,
-        config.gaussian_y,
-        config.gaussian_z,
-        config.r²_x,
-        config.r²_y,
-        config.r²_z,
-        config.idx_x,
-        config.idx_y,
-        config.idx_z,
+        config.stencil_gaussian,
+        config.stencil_r²,
+        config.stencil_index,
     )
     return config
 end
@@ -44,9 +38,7 @@ end
     _spread_forces_kernel!(
         force_density, Y_sorted, F_sorted,
         σ, Σ, h, inv_h, num_grid_points, M_G,
-        gaussian_x, gaussian_y, gaussian_z,
-        r²_x, r²_y, r²_z,
-        idx_x, idx_y, idx_z,
+        stencil_gaussian, stencil_r², stencil_index,
     ) -> force_density
 
 Kernel for `spread_forces!`. For each particle, anchor the stencil at
@@ -65,8 +57,8 @@ normalisation come from `_modified_kernel_coefficients` (paper §3 equation (22)
 - `h::T`, `inv_h::T`: the grid spacing and its inverse.
 - `num_grid_points::NTuple{3, Int32}`: the grid dimensions `(M_x, M_y, M_z)`.
 - `M_G::Int32`: the cubic stencil support per axis.
-- `gaussian_x`, `gaussian_y`, `gaussian_z`, `r²_x`, `r²_y`, `r²_z`, `idx_x`, `idx_y`,
-  `idx_z`: per-axis scratch vectors of length `M_G` (Gaussian weights, axis-squared
+- `stencil_gaussian`, `stencil_r²`, `stencil_index`: the per-particle stencil scratch
+  fields of length `M_G` (`StructArray`s of per-axis Gaussian weights, axis-squared
   distances, and periodic-wrapped 1-based indices).
 
 # Returns
@@ -74,8 +66,9 @@ normalisation come from `_modified_kernel_coefficients` (paper §3 equation (22)
 
 # Notes
 Preconditions (caller-guaranteed, so the loops are `@inbounds`): `Y_sorted`, `F_sorted` have
-shape `(3, N)`; the scratch vectors have length `M_G`; `force_density` is backed by three
-`Array{T, 3}` of shape `(M_x, M_y, M_z)` via `StructArrays.components`; positions have been
+shape `(3, N)`; the stencil scratch fields have length `M_G`; `force_density` and the
+scratch fields are backed by per-component arrays via `StructArrays.components`
+(`force_density` by three `Array{T, 3}` of shape `(M_x, M_y, M_z)`); positions have been
 folded into `[0, L_i)` by `wrap_positions!`.
 
 See `spec/force-spreading.md`.
@@ -90,34 +83,28 @@ function _spread_forces_kernel!(
     inv_h::T,
     num_grid_points::NTuple{3, Int32},
     M_G::Int32,
-    gaussian_x::Vector{T},
-    gaussian_y::Vector{T},
-    gaussian_z::Vector{T},
-    r²_x::Vector{T},
-    r²_y::Vector{T},
-    r²_z::Vector{T},
-    idx_x::Vector{Int32},
-    idx_y::Vector{Int32},
-    idx_z::Vector{Int32},
+    stencil_gaussian,
+    stencil_r²,
+    stencil_index,
 ) where {T}
     fx, fy, fz = components(force_density)
     fill!(fx, zero(T))
     fill!(fy, zero(T))
     fill!(fz, zero(T))
 
+    gaussian_x, gaussian_y, gaussian_z = components(stencil_gaussian)
+    r²_x, r²_y, r²_z = components(stencil_r²)
+    idx_x, idx_y, idx_z = components(stencil_index)
+
     a₀, a₂, inv_norm, inv_2Σ² = _modified_kernel_coefficients(σ, Σ)
 
     half_M_G = M_G ÷ Int32(2)
 
     @inbounds for s in axes(Y_sorted, 2)
-        F1 = F_sorted[1, s]
-        F2 = F_sorted[2, s]
-        F3 = F_sorted[3, s]
+        F_n = SVector(F_sorted[1, s], F_sorted[2, s], F_sorted[3, s])
 
         _fill_particle_stencil!(
-            gaussian_x, gaussian_y, gaussian_z,
-            r²_x, r²_y, r²_z,
-            idx_x, idx_y, idx_z,
+            stencil_gaussian, stencil_r², stencil_index,
             Y_sorted[1, s], Y_sorted[2, s], Y_sorted[3, s],
             inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
         )
@@ -130,17 +117,14 @@ function _spread_forces_kernel!(
                 iy = idx_y[ky]
                 gaussian_yz = gaussian_y[ky] * gz
                 r²_yz = r²_y[ky] + r²z
-                # The three force components are accumulated into separate SoA
-                # arrays (fx/fy/fz), not an SVector per grid point: this lets
-                # `@simd` vectorise the inner kx sweep and keeps the kernel
-                # allocation-free. A vectorial form would risk the `@simd`
-                # independence, so it is deferred pending a benchmark.
+                # The SVector store through the StructArray lowers to the
+                # same three SoA component writes as explicit fx/fy/fz
+                # accumulation (benchmarked at parity, allocation-free), and
+                # `@simd` vectorisation of the kx sweep survives it.
                 @simd for kx in Int32(1):M_G
                     ix = idx_x[kx]
                     w = (a₀ + a₂ * (r²_x[kx] + r²_yz)) * gaussian_x[kx] * gaussian_yz
-                    fx[ix, iy, iz] += F1 * w
-                    fy[ix, iy, iz] += F2 * w
-                    fz[ix, iy, iz] += F3 * w
+                    force_density[ix, iy, iz] += w * F_n
                 end
             end
         end

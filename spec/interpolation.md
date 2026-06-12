@@ -96,7 +96,7 @@ negligible at modest $M_G$.
 
 ### Cold-path input and derived state
 
-None new. Interpolation reuses the grid, kernel widths, and per-axis scratch vectors built
+None new. Interpolation reuses the grid, kernel widths, and stencil scratch fields built
 for steps 3 and 4. It runs strictly after the spread and the Stokes solve, so reusing the
 scratch is safe.
 
@@ -117,7 +117,7 @@ scratch is safe.
 
 ### Side effects
 
-- The per-axis scratch vectors are overwritten with the last particle's values; they carry
+- The stencil scratch fields are overwritten with the last particle's values; they carry
   no between-call invariant (shared with step 3).
 - `config.fluid_velocity` is **not** modified.
 
@@ -152,7 +152,7 @@ $P^T$ of Method — so the output lands in the caller's order with no extra buff
 
 Because `_fill_particle_stencil!` is shared verbatim with `_spread_forces_kernel!`, the
 interpolation weights are bit-for-bit the spread weights, which is what makes
-$\tilde{\mathcal{J}} = h^3 S^T$ hold exactly. The stencil index buffers are `idx_x/y/z`.
+$\tilde{\mathcal{J}} = h^3 S^T$ hold exactly. The stencil index field is `stencil_index`.
 
 | Phase | Allocations | Functions |
 |---|---|---|
@@ -171,8 +171,9 @@ The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
 - **$h^3$ once per particle**, not folded per grid point — three multiplies per particle
   versus three per stencil point. Algebraically identical, and it keeps the discrete-adjoint
   test bit-exact against the spread weights.
-- **Scratch reuse.** The `gaussian_*`, `r²_*`, `idx_*` vectors built for the spread are reused;
-  interpolation runs strictly after spread + solve, so there is no overlap.
+- **Scratch reuse.** The `stencil_gaussian`, `stencil_r²`, and `stencil_index` fields
+  built for the spread are reused; interpolation runs strictly after spread + solve, so
+  there is no overlap.
 - **No write race.** The gather only reads the grid, and the per-particle output columns are
   distinct (a permutation), so this loop is a clean future threading / SIMD target — deferred
   to a benchmark.

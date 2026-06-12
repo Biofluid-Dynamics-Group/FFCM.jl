@@ -69,7 +69,7 @@ so the three-dimensional normalisation $(2\pi\Sigma^2)^{-3/2}$ is the product of
 $$
 r_n^2 = (x_{i_x} - Y_{n,1})^2 + (y_{i_y} - Y_{n,2})^2 + (z_{i_z} - Y_{n,3})^2 .
 $$
-Per particle, the kernel precomputes the three one-dimensional weight vectors (`gaussian_x/y/z`, $\mathcal{O}(M_G)$ exponentials each) and the three axis-squared-distance vectors (`r²_x/y/z`); the inner $M_G^3$ loop then assembles $\tilde{\Delta}_n$ with three multiplies and the polynomial factor $(a_0 + a_2 r_n^2)$, evaluating no further exponentials.
+Per particle, the kernel precomputes the per-axis one-dimensional Gaussian weights (`stencil_gaussian`, $\mathcal{O}(M_G)$ exponentials per axis) and the per-axis squared distances (`stencil_r²`); the inner $M_G^3$ loop then assembles $\tilde{\Delta}_n$ with three multiplies and the polynomial factor $(a_0 + a_2 r_n^2)$, evaluating no further exponentials.
 
 ### Per-particle stencil — nearest-anchored
 
@@ -115,9 +115,9 @@ The cold-path inputs from steps 1–2 (`L`, `R_c`, `N`) are unchanged.
 | `h` | `T` | Uniform grid spacing $\frac{L_i}{M_i}$, equal across axes (validated). |
 | `inv_h` | `T` | Precomputed $\frac{1}{h}$ (the hot path multiplies). |
 | `force_density` | `StructArray{SVector{3, T}, 3, …}` | Shape $(M_x, M_y, M_z)$; three-component vector field, struct-of-arrays backed. |
-| `gaussian_x`, `gaussian_y`, `gaussian_z` | `Vector{T}` | Length $M_G$; per-particle 1-D Gaussian weights. |
-| `r²_x`, `r²_y`, `r²_z` | `Vector{T}` | Length $M_G$; per-particle axis-squared distances. |
-| `idx_x`, `idx_y`, `idx_z` | `Vector{Int32}` | Length $M_G$; per-particle 1-based periodic-wrapped stencil indices. |
+| `stencil_gaussian` | `StructArray{SVector{3, T}, 1, …}` | Length $M_G$; per-particle, per-axis 1-D Gaussian weights. |
+| `stencil_r²` | `StructArray{SVector{3, T}, 1, …}` | Length $M_G$; per-particle, per-axis squared distances. |
+| `stencil_index` | `StructArray{SVector{3, Int32}, 1, …}` | Length $M_G$; per-particle, per-axis 1-based periodic-wrapped stencil indices. |
 
 Cold-path validation (constructor): `a == T(1)`; $\frac{\Sigma}{\sigma} \geq 1$;
 $M_G \geq 2$; all `num_grid_points[i] ≥ 1`; $M_G \leq \min(M_x, M_y, M_z)$;
@@ -139,8 +139,8 @@ grid on some axis would wrap distinct stencil points onto the same grid point.
   for $i_x \in 1{:}M_x$, $i_y \in 1{:}M_y$, $i_z \in 1{:}M_z$. The grid is zeroed
   at the start of the call.
 
-The scratch buffers (`gaussian_*`, `r²_*`, `idx_*`) are overwritten with the last
-particle's per-axis values; they carry no between-call invariant.
+The scratch fields (`stencil_gaussian`, `stencil_r²`, `stencil_index`) are overwritten
+with the last particle's per-axis values; they carry no between-call invariant.
 
 ### Periodicity contract
 
@@ -180,8 +180,8 @@ each kernel be exercised in isolation by the tests:
   accumulating $\boldsymbol{F}_n(a_0 + a_2 r_n^2)g_x g_y g_z$ into the
   components of `force_density`.
 - `_fill_particle_stencil!` computes, for one particle, the per-axis Gaussian
-  weights `gaussian_x/y/z`, the axis-squared distances `r²_x/y/z`, and the
-  periodic-wrapped 1-based indices `idx_x/y/z` of its $M_G^3$ stencil. It is shared
+  weights `stencil_gaussian`, the axis-squared distances `stencil_r²`, and the
+  periodic-wrapped 1-based indices `stencil_index` of its $M_G^3$ stencil. It is shared
   verbatim with interpolation ([interpolation.md](interpolation.md)): interpolation
   is the exact discrete adjoint of the spread, so both must place and weight the
   stencil identically, and keeping the convention in one function is what
@@ -191,7 +191,7 @@ each kernel be exercised in isolation by the tests:
 
 | Phase | Allocations | Functions |
 |---|---|---|
-| Cold | OK | `FFCMConfig` constructor: validate inputs; derive `σ, Σ, h, inv_h`; allocate `force_density` and the per-axis scratch vectors. |
+| Cold | OK | `FFCMConfig` constructor: validate inputs; derive `σ, Σ, h, inv_h`; allocate `force_density` and the stencil scratch fields. |
 | Hot  | `@ballocated == 0` | `spread_forces!(config)` (after wrap → assign → sort). |
 
 The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
@@ -249,8 +249,8 @@ convention.
   1. **Cold-path validation.** `a ≠ T(1)` is rejected; `Σ_over_σ < T(1)` is
      rejected; anisotropic spacing is rejected. Derived fields satisfy the closed
      forms ($\sigma = \frac{1}{\sqrt{\pi}}$, $\Sigma = \frac{\Sigma}{\sigma}\sigma$,
-     $h = \frac{L_1}{M_x}$). `force_density` has shape $(M_x, M_y, M_z)$; scratch
-     vectors have length $M_G$.
+     $h = \frac{L_1}{M_x}$). `force_density` has shape $(M_x, M_y, M_z)$; the stencil
+     scratch fields have length $M_G$.
   2. **Closed-form single-particle stencil.** One particle at a known position;
      hand-computed $\tilde{\Delta}_n(\boldsymbol{x}_g; \Sigma)$ at stencil points
      matches `force_density` to `sqrt(eps(T))`.
@@ -306,7 +306,7 @@ the cuFCM convention.
 | Periodic wrap | `xg − nx⋅floor(xg/nx)`. | `mod(j_x − ⌊M_G/2⌋ + s, M_x)`. | **Keep** — semantically identical. |
 | Normalisation | `Anorm = 1/√(2π⋅Σ²)` per axis; 3-D as `Anorm³`. | Identical (`inv_norm`). | **Keep**. |
 | Polynomial coefficients | `temp2 = ½⋅pdmag/Σ²`, `temp3 = temp2/Σ²`, `temp4 = 3⋅temp2`, `pdmag = σ²−Σ²`; factor `(1 + temp3⋅r² − temp4)`. | $a_0 = 1 − \frac{3(\sigma^2-\Sigma^2)}{2\Sigma^2}$, $a_2 = \frac{\sigma^2-\Sigma^2}{2\Sigma^4}$. | **Keep** — algebraically identical; named after the closed form. |
-| Per-particle precompute | shared-mem `gaussx/y/z`, `xdis/ydis/zdis`, `indx/y/z`, grad-Gaussian (rotation), scalars. | `gaussian_*`, `r²_*`, `idx_*`, length $M_G$. Stores $r^2_i = x_i^2$ rather than signed `xdis`. | **Adopt** the pattern; store $r^2$ directly (one fewer multiply per inner iteration). |
+| Per-particle precompute | shared-mem `gaussx/y/z`, `xdis/ydis/zdis`, `indx/y/z`, grad-Gaussian (rotation), scalars. | `stencil_gaussian`, `stencil_r²`, `stencil_index`, length $M_G$. Stores $r^2_i = x_i^2$ rather than signed `xdis`. | **Adopt** the pattern; store $r^2$ directly (one fewer multiply per inner iteration). |
 | Scatter into grid | `atomicAdd(&fx[ind], …)` for the many-to-one race. | Plain `fx[i_x, i_y, i_z] += …` (single-threaded CPU). | **Keep** for the MVP; threading needs atomics or thread-local accumulators. |
 | Particle iteration | one CUDA block per particle; `Y[3⋅np + k]` from raw arrays (the sort index is a filter, not an indirection). | serial loop over sorted slots; reads materialised `Y_sorted`/`F_sorted`. | **Keep** — step 2 paid the gather; consecutive sorted particles give cache locality. |
 | Dipole / torque / rotation | `rotation == 1` branch spreads $\boldsymbol{H}\nabla\Delta$. | none — force-only $\mathcal{M}^{\mathcal{V}\mathcal{F}}$. | **Out of scope** for the force-only operator. |

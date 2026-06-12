@@ -36,15 +36,9 @@ function interpolate_velocities!(
         config.inv_h,
         config.num_grid_points,
         config.M_G,
-        config.gaussian_x,
-        config.gaussian_y,
-        config.gaussian_z,
-        config.r²_x,
-        config.r²_y,
-        config.r²_z,
-        config.idx_x,
-        config.idx_y,
-        config.idx_z,
+        config.stencil_gaussian,
+        config.stencil_r²,
+        config.stencil_index,
     )
     return V
 end
@@ -53,9 +47,7 @@ end
     _interpolate_velocities_kernel!(
         V, fluid_velocity, Y_sorted, original_index,
         σ, Σ, h, inv_h, num_grid_points, M_G,
-        gaussian_x, gaussian_y, gaussian_z,
-        r²_x, r²_y, r²_z,
-        idx_x, idx_y, idx_z,
+        stencil_gaussian, stencil_r², stencil_index,
     ) -> V
 
 Kernel for `interpolate_velocities!`. For each particle, anchor the stencil at
@@ -76,15 +68,16 @@ come from `_modified_kernel_coefficients` (paper §3 equation (22)).
 - `h::T`, `inv_h::T`: the grid spacing and its inverse.
 - `num_grid_points::NTuple{3, Int32}`: the grid dimensions `(M_x, M_y, M_z)`.
 - `M_G::Int32`: the cubic stencil support per axis.
-- `gaussian_x`, `gaussian_y`, `gaussian_z`, `r²_x`, `r²_y`, `r²_z`, `idx_x`, `idx_y`,
-  `idx_z`: per-axis scratch vectors of length `M_G`.
+- `stencil_gaussian`, `stencil_r²`, `stencil_index`: the per-particle stencil scratch
+  fields of length `M_G` (`StructArray`s of per-axis Gaussian weights, axis-squared
+  distances, and periodic-wrapped 1-based indices).
 
 # Returns
 - `V`: the same matrix, holding the interpolated velocities.
 
 # Notes
 Preconditions (caller-guaranteed, so the loops are `@inbounds`): `V`, `Y_sorted` have shape
-`(3, N)`; the scratch vectors have length `M_G`; `fluid_velocity` is backed by three
+`(3, N)`; the stencil scratch fields have length `M_G`; `fluid_velocity` is backed by three
 `Array{T, 3}` of shape `(M_x, M_y, M_z)` via `StructArrays.components`; `original_index` is
 a permutation of `1:N`; positions have been folded into `[0, L_i)` by `wrap_positions!`.
 
@@ -101,17 +94,13 @@ function _interpolate_velocities_kernel!(
     inv_h::T,
     num_grid_points::NTuple{3, Int32},
     M_G::Int32,
-    gaussian_x::Vector{T},
-    gaussian_y::Vector{T},
-    gaussian_z::Vector{T},
-    r²_x::Vector{T},
-    r²_y::Vector{T},
-    r²_z::Vector{T},
-    idx_x::Vector{Int32},
-    idx_y::Vector{Int32},
-    idx_z::Vector{Int32},
+    stencil_gaussian,
+    stencil_r²,
+    stencil_index,
 ) where {T}
-    ux, uy, uz = components(fluid_velocity)
+    gaussian_x, gaussian_y, gaussian_z = components(stencil_gaussian)
+    r²_x, r²_y, r²_z = components(stencil_r²)
+    idx_x, idx_y, idx_z = components(stencil_index)
 
     a₀, a₂, inv_norm, inv_2Σ² = _modified_kernel_coefficients(σ, Σ)
     h³ = h^3
@@ -120,20 +109,14 @@ function _interpolate_velocities_kernel!(
 
     @inbounds for s in axes(Y_sorted, 2)
         _fill_particle_stencil!(
-            gaussian_x, gaussian_y, gaussian_z,
-            r²_x, r²_y, r²_z,
-            idx_x, idx_y, idx_z,
+            stencil_gaussian, stencil_r², stencil_index,
             Y_sorted[1, s], Y_sorted[2, s], Y_sorted[3, s],
             inv_norm, inv_2Σ², h, inv_h, num_grid_points, M_G, half_M_G,
         )
 
-        # Gather into three scalar accumulators (vx/vy/vz), not an SVector,
-        # and store the result with the explicit per-component writes below.
-        # This keeps the kernel allocation-free and the accumulators
-        # register-resident. A vectorial form is deferred pending a benchmark.
-        vx = zero(T)
-        vy = zero(T)
-        vz = zero(T)
+        # The SVector accumulator stays register-resident and allocation-free
+        # (benchmarked at parity with three scalar accumulators).
+        v = zero(SVector{3, T})
         for kz in Int32(1):M_G
             iz = idx_z[kz]
             gz = gaussian_z[kz]
@@ -145,17 +128,13 @@ function _interpolate_velocities_kernel!(
                 for kx in Int32(1):M_G
                     ix = idx_x[kx]
                     w = (a₀ + a₂ * (r²_x[kx] + r²_yz)) * gaussian_x[kx] * gaussian_yz
-                    vx += ux[ix, iy, iz] * w
-                    vy += uy[ix, iy, iz] * w
-                    vz += uz[ix, iy, iz] * w
+                    v += w * fluid_velocity[ix, iy, iz]
                 end
             end
         end
 
         n = original_index[s]
-        V[1, n] = h³ * vx
-        V[2, n] = h³ * vy
-        V[3, n] = h³ * vz
+        V[:, n] .= h³ * v
     end
     return V
 end

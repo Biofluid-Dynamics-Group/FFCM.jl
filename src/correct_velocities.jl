@@ -255,6 +255,10 @@ function _correct_velocities_kernel!(
                         end
                     end
                     n = original_index[s]
+                    # Explicit per-component accumulation: the broadcast form
+                    # `V[:, n] .+= v` routes the SubArray–SVector mix through
+                    # StaticArrays' broadcast style and allocates a temporary,
+                    # breaking the zero-allocation contract.
                     V[1, n] += v[1]
                     V[2, n] += v[2]
                     V[3, n] += v[3]
