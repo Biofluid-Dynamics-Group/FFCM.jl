@@ -3,12 +3,16 @@
         ; L, R_c, N, a = T(1), kernel_widths_ratio, num_grid_points, M_G, viscosity,
         fft_planning = :measure, fft_threads = 1,
     ) -> FFCMConfig{T}
+    FFCMConfig(; L, ...) -> FFCMConfig{eltype(L)}
 
 Configuration of the Fast FCM mobility operator: the cell partition of the pairwise
 correction (paper §4), the FCM grid parameters (paper §3 and §5), and the per-call buffers
 sized for `N` particles. Built once and reused across `mobility!` calls, which write into
 the buffers this struct owns. `N` is fixed at construction — changing `N` requires a new
 `FFCMConfig`.
+
+The type-parameter-free form infers the working precision `T` from the element type of
+the domain lengths `L`, which must be a concrete subtype of `AbstractFloat`.
 
 # Keywords
 - `L::NTuple{3, T}`: the domain lengths `(L_x, L_y, L_z)` (paper §4). Each component must be
@@ -49,7 +53,9 @@ the buffers this struct owns. `N` is fixed at construction — changing `N` requ
   (non-unit radius not yet implemented), `kernel_widths_ratio < 1`, `M_G < 2`,
   `M_G > min(num_grid_points)`, any `num_grid_points` component `< 1`, the grid spacing is
   anisotropic, `viscosity ≤ 0`, `fft_planning` is not one of the three planner efforts,
-  or `fft_threads < 1`.
+  or `fft_threads < 1`. The type-parameter-free form additionally throws if `eltype(L)`
+  is not a concrete subtype of `AbstractFloat` (integer or mixed-precision lengths are
+  rejected, not promoted — the working precision is an explicit choice).
 
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`, `spec/force-spreading.md`, and
 `spec/stokes-solve.md`.
@@ -312,4 +318,13 @@ function FFCMConfig{T}(;
         forward_fourier_transform,
         inverse_fourier_transform,
     )
+end
+
+function FFCMConfig(; L, kwargs...)
+    T = eltype(L)
+    T <: AbstractFloat && isconcretetype(T) || throw(ArgumentError(
+        "the element type of L must be a concrete subtype of AbstractFloat " *
+        "to infer the working precision; got eltype(L) = $(T)",
+    ))
+    return FFCMConfig{T}(; L, kwargs...)
 end

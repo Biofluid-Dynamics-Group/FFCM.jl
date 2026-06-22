@@ -27,6 +27,7 @@ include("test_utilities.jl")
     include("accuracy/test_fft_planning.jl")
     include("accuracy/test_fftw_threading.jl")
     include("hygiene/test_exported_surface.jl")
+    include("hygiene/test_ascii_public_surface.jl")
     include("hygiene/test_aqua.jl")
     include("hygiene/test_jet.jl")
 end

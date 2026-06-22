@@ -155,3 +155,31 @@ end
     @test config.h ≈ 0.5f0
     @test eltype(config.force_density) == SVector{3, Float32}
 end
+
+@testset "Element type is inferred from the domain lengths" begin
+    config = FFCMConfig(; _DEFAULT_KWARGS...)
+    @test config isa FFCMConfig{Float64}
+    explicit = FFCMConfig{Float64}(; _DEFAULT_KWARGS...)
+    @test config.σ == explicit.σ
+    @test config.Σ == explicit.Σ
+    @test config.h == explicit.h
+
+    config32 = FFCMConfig(;
+        L = (4.0f0, 4.0f0, 4.0f0),
+        R_c = 1.0f0,
+        N = 10,
+        kernel_widths_ratio = 2.0f0,
+        num_grid_points = (Int32(8), Int32(8), Int32(8)),
+        M_G = 8,
+        viscosity = 1.0f0,
+    )
+    @test config32 isa FFCMConfig{Float32}
+end
+
+@testset "Integer domain lengths are rejected: working precision is an explicit choice" begin
+    @test_throws ArgumentError FFCMConfig(; _DEFAULT_KWARGS..., L = (4, 4, 4))
+end
+
+@testset "Mixed-precision domain lengths have no concrete element type and are rejected" begin
+    @test_throws ArgumentError FFCMConfig(; _DEFAULT_KWARGS..., L = (4.0, 4.0f0, 4.0))
+end

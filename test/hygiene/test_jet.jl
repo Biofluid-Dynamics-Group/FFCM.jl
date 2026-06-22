@@ -57,6 +57,9 @@ end
         @test_call FFCMConfig{T}(;
             L = L, R_c = T(1), N = 16, _fcm_grid_kwargs(L)...,
         )
+        @test_call FFCMConfig(;
+            L = L, R_c = T(1), N = 16, _fcm_grid_kwargs(L)...,
+        )
     end
 end
 
