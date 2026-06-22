@@ -67,6 +67,22 @@ is the natural `reshape`, so a velocity vector may equivalently be viewed as
 
 ## Contract
 
+### `FFCMConfig(; L, …)` and `FFCMConfig{T}(; …)`
+
+The element type `T <: AbstractFloat` of every float parameter and buffer in the
+configuration is fixed at construction. Two equivalent forms set it:
+
+- `FFCMConfig{T}(; L, …)` — `T` is given explicitly as the type parameter.
+- `FFCMConfig(; L, …)` — `T` is inferred as `eltype(L)`, the element type of the domain
+  lengths tuple. `eltype(L)` must be a concrete subtype of `AbstractFloat`; otherwise the
+  constructor throws `ArgumentError`. Integer lengths are rejected rather than promoted —
+  the working precision is the user's explicit choice, never a silent default — and a
+  mixed-precision tuple such as `(4.0, 4.0f0, 4.0)` is rejected because its element type
+  is the abstract `AbstractFloat`.
+
+Both forms run the same parameter validation; the parameter meanings and the individual
+preconditions are documented on the `FFCMConfig` docstring.
+
 ### `mobility!(V, config, Y, F)`
 
 - `Y`, `F`, `V` are caller-owned $3 \times N$ matrices (column $n$ is particle $n$, row $i$
@@ -142,20 +158,20 @@ call (see [stokes-solve.md](stokes-solve.md)).
 
 ## Verification
 
-- `test/test_mobility.jl` — the composition matches the six steps applied by hand; `Y` and
-  `F` are not mutated; `V` comes out in the caller's original order; the 3- and 5-argument
-  `mul!` agree with `mobility!` and obey the `α`/`β` contract (including $\beta = 0$ on an
-  uninitialised `v`); `size` and `eltype` are correct; the `FFCMMobility` constructor rejects
-  a non-`3xN` `Y` and an `N` mismatch.
-- `test/test_single_sphere_mobility.jl` — the end-to-end accuracy result: the assembled
-  operator reproduces the $\sigma$-regularised single-sphere periodic self-mobility
-  independent of $\Sigma$, to grid-truncation tolerance.
-- `test/test_mobility_inferred.jl` — `@inferred` for `mobility!` and both `mul!` methods,
-  `Float32`/`Float64`.
-- `test/test_mobility_allocations.jl` — `@ballocated == 0` for `mobility!` and both `mul!`
-  methods.
-- `test/test_jet.jl` — `JET.@test_call mobility!` over the full call graph.
-- `test/test_aqua.jl` — package hygiene.
+- `test/accuracy/test_mobility.jl` — the composition matches the six steps applied by
+  hand; `Y` and `F` are not mutated; `V` comes out in the caller's original order; the 3-
+  and 5-argument `mul!` agree with `mobility!` and obey the `α`/`β` contract (including
+  $\beta = 0$ on an uninitialised `v`); `size` and `eltype` are correct; the
+  `FFCMMobility` constructor rejects a non-`3xN` `Y` and an `N` mismatch.
+- `test/accuracy/test_single_sphere_mobility.jl` — the end-to-end accuracy result: the
+  assembled operator reproduces the $\sigma$-regularised single-sphere periodic
+  self-mobility independent of $\Sigma$, to grid-truncation tolerance.
+- `test/accuracy/test_fcm_grid.jl` — the inferred-`T` constructor form matches the
+  explicit form and rejects integer and mixed-precision domain lengths.
+- `test/api/test_mobility_api.jl` — `@inferred` and `@ballocated == 0` for `mobility!`
+  and both `mul!` methods, `Float32`/`Float64`.
+- `test/hygiene/test_jet.jl` — `JET.@test_call mobility!` over the full call graph.
+- `test/hygiene/test_aqua.jl` — package hygiene.
 
 ## Differences from cuFCM
 
