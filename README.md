@@ -41,7 +41,7 @@ N = size(Y, 2)  # Number of particles
 num_points = Int32(16)  # Grid discretisation
 M_G = 8  # Stencil size
 
-config = FFCMConfig{T}(
+config = FFCMConfig(
     L = (L_x, L_y, L_z),
     R_c = R_c,
     N = N,
@@ -55,13 +55,15 @@ V = zeros(T, 3, N)  # Target array for velocities, size 3xN of type T
 mobility!(V, config, Y, F)  # Use FFCM as a function
 
 M = FFCMMobility(config, Y)  # Mobility operator
-V = M*F  # Alternatively, use the method as a linear operator (useful for iterative solvers)
+V = M * F  # Alternatively, use the method as a linear operator (useful for iterative solvers)
 ```
+
+The first mobility call after loading the package will trigger compilation, but subsequent calls should run at full speed.
 
 ## Parameter optimisation
 
-_Helpers to calibrate the method parameters (`Σ/σ`, `R_c`, the grid resolution)
-to target hardware are planned and not yet available._
+_Helpers to calibrate the method parameters (`Σ/σ` (`kernel_widths_ratio`), `R_c`, the
+grid resolution) to target hardware are planned and not yet available._
 
 ## GPU acceleration
 
@@ -73,4 +75,8 @@ MIT — see [LICENSE](LICENSE).
 
 ## LLM assistance
 
-This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus` and `claude-4.6-sonnet` in code generation, test generation, architectural decision-making and documentation.
+This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus` and `claude-4.6-sonnet` in code generation, test generation, design and documentation.
+
+## Contributing
+
+Contributions are welcome! A general guide for contribution to scientific Julia packages is available by the SciML community as [ColPrac](https://github.com/SciML/ColPrac). We additionally ask to disclose any use of LLM assistance in coding for transparency.

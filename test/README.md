@@ -12,8 +12,8 @@ pipeline order (accuracy and API files interleave step by step):
   the step *entry points* only — a zero-allocation entry bounds its callees,
   and JET walks inference into them — so internal kernels are deliberately
   not exercised here.
-- **`hygiene/`** (`test_aqua.jl`, `test_jet.jl`, `test_exported_surface.jl`)
-  audits the package as a whole.
+- **`hygiene/`** (`test_aqua.jl`, `test_jet.jl`, `test_exported_surface.jl`,
+  `test_ascii_public_surface.jl`) audits the package as a whole.
 
 Shared fixtures live in `test_utilities.jl`, directly under `test/`
 (standard config builder, clustered particle cloud, near-zero tolerance),
@@ -36,7 +36,7 @@ document their own physical tolerance inline.
 | `accuracy/test_assign_cells_kernel.jl` | Hash linearisation `x + (y + z⋅m_y)⋅m_x`, upper-edge clamp, hash bounds | Hand-computed hashes |
 | `accuracy/test_assign_cells.jl` | Entry point delegates to the kernel on config fields and returns the config buffer | Kernel called directly |
 | `accuracy/test_sort_particles_by_cell.jl` | Counting sort: ordering, cell bracketing, stability, gather permutation | Permutation identities |
-| `accuracy/test_fcm_grid.jl` | Constructor invariants: `σ = a/√π`, `Σ = (Σ/σ)⋅σ`, isotropic `h`, `2 ≤ M_G ≤ min(M)`, SoA buffers | Paper §2/§3/§5 relations |
+| `accuracy/test_fcm_grid.jl` | Constructor invariants: `σ = a/√π`, `Σ = (Σ/σ)⋅σ`, isotropic `h`, `2 ≤ M_G ≤ min(M)`, SoA buffers; inferred-`T` form matches the explicit form and rejects non-float `eltype(L)` | Paper §2/§3/§5 relations |
 | `accuracy/test_modified_kernel_coefficients.jl` | Eq. (22) expansion scalars; `Σ = σ` degenerate limit | Independent algebra of the same expansion |
 | `accuracy/test_spread_forces.jl` | Spread matches the closed-form modified kernel; anchor convention; force conservation; first moment; translation; linearity; `Σ = σ` collapse | Paper §3 eq. (22) closed form; integral identities |
 | `accuracy/test_stokes_solve.jl` | Wavenumber layout; `k = 0` gauge fix; per-mode incompressibility; analytical single mode; linearity; translation/reflection equivariance; `1/μ` scaling | Analytical Fourier solutions and symmetries |
@@ -47,6 +47,7 @@ document their own physical tolerance inline.
 | `accuracy/test_single_sphere_mobility.jl` | **Headline**: end-to-end self-mobility against the reciprocal-lattice regularised-Stokeslet sum; Σ-independence of the assembled operator | Paper §3 eqs. (32)–(33) lattice sum (`Float64` only: the bound is grid-truncation, which `Float32` round-off would mask) |
 | `api/test_*_api.jl` (x7) | `@inferred` + zero allocations for each step entry point and the assembled operator | Hot-path contract tables in each `spec/*.md` |
 | `hygiene/test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | `spec/mobility.md` two-phase public surface |
+| `hygiene/test_ascii_public_surface.jl` | Exported names and public keyword arguments are ASCII (typeable in any terminal); Unicode stays internal | Method introspection (`Base.kwarg_decl`), with sentinel keywords against vacuous passes |
 | `hygiene/test_aqua.jl` | Package hygiene | Aqua.jl (below) |
 | `hygiene/test_jet.jl` | Whole-call-graph inference and dispatch health | JET.jl (below) |
 
