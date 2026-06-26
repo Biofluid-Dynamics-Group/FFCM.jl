@@ -1,4 +1,5 @@
 using Test
+using CUDA
 
 include("test_utilities.jl")
 
@@ -30,4 +31,13 @@ include("test_utilities.jl")
     include("hygiene/test_ascii_public_surface.jl")
     include("hygiene/test_aqua.jl")
     include("hygiene/test_jet.jl")
+
+    # CUDA backend. The not-loaded error check needs no device; the construction
+    # and parity tests run only where a CUDA device is functional.
+    include("cuda/test_gpu_backend_selection.jl")
+    if CUDA.functional()
+        include("cuda/test_gpu_construction.jl")
+    else
+        @info "CUDA device not functional; skipping GPU construction tests"
+    end
 end

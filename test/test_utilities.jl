@@ -43,12 +43,27 @@ function _standard_test_config(
     R_c = T(1),
     fft_planning = :estimate,
     fft_threads = 1,
+    gpu_acceleration = false,
 ) where {T}
     return FFCMConfig{T}(;
         L = L, R_c = R_c, N = N, kernel_widths_ratio = Σ_over_σ, viscosity = μ,
         num_grid_points = num_grid_points, M_G = M_G, fft_planning = fft_planning,
-        fft_threads = fft_threads,
+        fft_threads = fft_threads, gpu_acceleration = gpu_acceleration,
     )
+end
+
+# GPU-backed counterpart of `_standard_test_config` for the CPU↔CUDA parity
+# tests. Only constructible where the CUDA extension is loaded and a device is
+# functional; the per-step parity tests (added with each GPU kernel) call it
+# under a `CUDA.functional()` guard.
+_gpu_config(::Type{T}; kwargs...) where {T} =
+    _standard_test_config(T; gpu_acceleration = true, kwargs...)
+
+# Compares a CPU result against a GPU result by moving both to the host before
+# `isapprox`. Tolerances follow the suite convention: relative `sqrt(eps(T))`
+# with the near-zero absolute floor from `_near_zero_atol`.
+function _cpu_gpu_isapprox(cpu, gpu; rtol, atol)
+    return isapprox(Array(cpu), Array(gpu); rtol = rtol, atol = atol)
 end
 
 # Positions and forces for a compact particle cluster around the box centre:
@@ -94,10 +109,10 @@ end
 function _fill_sorted_midbox!(config, L::NTuple{3, T}, N) where {T}
     for n in 1:N
         for i in 1:3
-            config.Y_sorted[i, n] = L[i] * T(0.5)
-            config.F_sorted[i, n] = T(0.1) * n
+            config.particles.Y_sorted[i, n] = L[i] * T(0.5)
+            config.particles.F_sorted[i, n] = T(0.1) * n
         end
-        config.original_index[n] = Int32(n)
+        config.cells.original_index[n] = Int32(n)
     end
     return config
 end
