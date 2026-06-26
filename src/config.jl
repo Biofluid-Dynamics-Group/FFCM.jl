@@ -1,7 +1,124 @@
 """
+Cell-list bookkeeping for the pairwise correction (paper §4): the per-particle
+cell hash, the sort permutation, and the per-cell occupancy ranges with the
+counting-sort workspace. All five buffers are integer-indexed.
+
+The storage type `IntVector` is `Vector{Int32}` on the CPU backend and the
+device vector type on the GPU backend, so the backend is a type-parameter swap.
+
+# Fields
+- `cell_hash::IntVector`: per-particle 0-based linear cell index (length `N`).
+- `original_index::IntVector`: sorted slot to original particle index (length `N`).
+- `cell_start::IntVector`, `cell_end::IntVector`: 1-based inclusive sorted-slot
+  range of each cell (length `prod(num_cells)`).
+- `counting_sort_scratch::IntVector`: per-cell counting-sort workspace
+  (length `prod(num_cells)`).
+
+See `spec/spatial-hashing.md`, `spec/particle-sorting.md`.
+"""
+struct CellBuffers{IntVector}
+    cell_hash::IntVector
+    original_index::IntVector
+    cell_start::IntVector
+    cell_end::IntVector
+    counting_sort_scratch::IntVector
+end
+
+"""
+Particle-indexed `3xN` work buffers the cell-list pipeline folds and reorders
+the caller's positions and forces into (paper §4), kept distinct from the
+integer cell-list bookkeeping in `CellBuffers`.
+
+The storage type `Mat` is `Matrix{T}` on the CPU backend and the device matrix
+type on the GPU backend.
+
+# Fields
+- `Y_wrapped::Mat`: caller positions folded into the periodic box (so the
+  caller's `Y` is never mutated).
+- `Y_sorted::Mat`, `F_sorted::Mat`: positions and forces in cell-sorted order.
+
+See `spec/particle-sorting.md`.
+"""
+struct ParticleBuffers{Mat}
+    Y_wrapped::Mat
+    Y_sorted::Mat
+    F_sorted::Mat
+end
+
+"""
+The real-space grid fields of the FCM solve (paper §3): the spread force
+density and the interpolated fluid velocity, both `(M_x, M_y, M_z)` fields of
+3-vectors.
+
+The storage type `GridField` is a `StructArray{SVector{3, T}}` whose component
+arrays are `Array{T, 3}` on the CPU backend and the device array type on the
+GPU backend.
+
+# Fields
+- `force_density::GridField`: spread force density `J̃†[F]` (output of `spread_forces!`).
+- `fluid_velocity::GridField`: Stokes velocity field (output of `stokes_solve!`).
+
+See `spec/force-spreading.md`, `spec/stokes-solve.md`.
+"""
+struct GridBuffers{GridField}
+    force_density::GridField
+    fluid_velocity::GridField
+end
+
+"""
+Fourier-space state of the spectral Stokes solve (paper §3): the half-complex
+force/velocity field, the per-axis wavevectors, and the cached FFT plans. Named
+for the solve rather than the transform so a future non-spectral Stokes solver
+can reuse the boundary.
+
+The component storage swaps with the backend; the FFT plans are FFTW plans on
+the CPU backend and cuFFT plans on the GPU backend.
+
+# Fields
+- `fluid_hat::SpectralField`: half-complex `(M_x÷2+1, M_y, M_z)` field reused as
+  the forward-transform output and the Stokes-solved spectrum.
+- `k_x::RealVector`, `k_y::RealVector`, `k_z::RealVector`: per-axis Fourier
+  wavevectors in FFTW layout.
+- `forward_fourier_transform::FwdTransform`,
+  `inverse_fourier_transform::InvTransform`: the real-to-complex and
+  complex-to-real plans.
+
+See `spec/stokes-solve.md`.
+"""
+struct SolverState{SpectralField, RealVector, FwdTransform, InvTransform}
+    fluid_hat::SpectralField
+    k_x::RealVector
+    k_y::RealVector
+    k_z::RealVector
+    forward_fourier_transform::FwdTransform
+    inverse_fourier_transform::InvTransform
+end
+
+"""
+Per-particle stencil workspace shared by spreading and interpolation (paper §5):
+the separable Gaussian weights, the squared grid-point distances, and the
+wrapped grid indices over the `M_G` cubic support. These are recomputed for each
+particle and carry no state between `mobility!` calls.
+
+The storage type swaps with the backend.
+
+# Fields
+- `stencil_gaussian::StencilField`: separable Gaussian stencil weights (length `M_G`).
+- `stencil_r²::StencilField`: squared distances to the stencil grid points (length `M_G`).
+- `stencil_index::StencilIndexField`: periodic-wrapped grid indices (length `M_G`).
+
+See `spec/force-spreading.md`, `spec/interpolation.md`.
+"""
+struct StencilBuffers{StencilField, StencilIndexField}
+    stencil_gaussian::StencilField
+    stencil_r²::StencilField
+    stencil_index::StencilIndexField
+end
+
+"""
     FFCMConfig{T}(
         ; L, R_c, N, a = T(1), kernel_widths_ratio, num_grid_points, M_G, viscosity,
-        fft_planning = :measure, fft_threads = 1,
+        fft_planning = :measure, fft_threads = 1, gpu_acceleration = false,
     ) -> FFCMConfig{T}
     FFCMConfig(; L, ...) -> FFCMConfig{eltype(L)}
 
@@ -10,6 +127,10 @@ correction (paper §4), the FCM grid parameters (paper §3 and §5), and the per
 sized for `N` particles. Built once and reused across `mobility!` calls, which write into
 the buffers this struct owns. `N` is fixed at construction — changing `N` requires a new
 `FFCMConfig`.
+
+The compiled buffers are grouped into the `cells`, `particles`, `grid`, `solver`, and
+`stencil` sub-structs; their storage types parameterize `FFCMConfig`, so selecting the GPU
+backend is a type swap and the backend never appears on the `mobility!` hot path.
 
 The type-parameter-free form infers the working precision `T` from the element type of
 the domain lengths `L`, which must be a concrete subtype of `AbstractFloat`.
@@ -43,7 +164,12 @@ the domain lengths `L`, which must be a concrete subtype of `AbstractFloat`.
 - `fft_threads::Integer = 1`: the execution thread count baked into the FFT plans. Must
   be at least 1. Threaded plans execute as Julia tasks, which allocate per call: the
   allocation-free hot path requires `fft_threads = 1`. The computed velocities match the
-  single-threaded result to round-off.
+  single-threaded result to round-off. Ignored by the GPU backend.
+- `gpu_acceleration::Bool = false`: build the configuration on a CUDA GPU rather than the
+  CPU. Requires the `CUDA` extension to be loaded (`using CUDA`) on a machine with a
+  functional CUDA device; otherwise construction throws. `Float64` on the GPU emits a
+  non-fatal warning, since double-precision throughput is a fraction of single-precision
+  on consumer NVIDIA hardware.
 
 # Returns
 - `FFCMConfig{T}`: the configuration `mobility!` operates on.
@@ -53,35 +179,20 @@ the domain lengths `L`, which must be a concrete subtype of `AbstractFloat`.
   (non-unit radius not yet implemented), `kernel_widths_ratio < 1`, `M_G < 2`,
   `M_G > min(num_grid_points)`, any `num_grid_points` component `< 1`, the grid spacing is
   anisotropic, `viscosity ≤ 0`, `fft_planning` is not one of the three planner efforts,
-  or `fft_threads < 1`. The type-parameter-free form additionally throws if `eltype(L)`
-  is not a concrete subtype of `AbstractFloat` (integer or mixed-precision lengths are
-  rejected, not promoted — the working precision is an explicit choice).
+  `fft_threads < 1`, or `gpu_acceleration = true` without the `CUDA` extension loaded. The
+  type-parameter-free form additionally throws if `eltype(L)` is not a concrete subtype of
+  `AbstractFloat` (integer or mixed-precision lengths are rejected, not promoted — the
+  working precision is an explicit choice).
 
-See `spec/spatial-hashing.md`, `spec/particle-sorting.md`, `spec/force-spreading.md`, and
-`spec/stokes-solve.md`.
+See `spec/spatial-hashing.md`, `spec/particle-sorting.md`, `spec/force-spreading.md`,
+`spec/stokes-solve.md`, and `spec/cuda-conventions.md`.
 """
-struct FFCMConfig{
-    T <: AbstractFloat,
-    GridField,
-    SpectralField,
-    StencilField,
-    StencilIndexField,
-    FwdTransform,
-    InvTransform,
-}
+struct FFCMConfig{T <: AbstractFloat, Cells, Particles, Grid, Solver, Stencil}
     L::NTuple{3, T}
     R_c::T
     num_cells::NTuple{3, Int32}
     cell_size::NTuple{3, T}
     inv_cell_size::NTuple{3, T}
-    cell_hash::Vector{Int32}
-    original_index::Vector{Int32}
-    cell_start::Vector{Int32}
-    cell_end::Vector{Int32}
-    counting_sort_scratch::Vector{Int32}
-    Y_sorted::Matrix{T}
-    F_sorted::Matrix{T}
-    Y_wrapped::Matrix{T}
     a::T
     σ::T
     Σ::T
@@ -89,18 +200,12 @@ struct FFCMConfig{
     M_G::Int32
     h::T
     inv_h::T
-    force_density::GridField
-    stencil_gaussian::StencilField
-    stencil_r²::StencilField
-    stencil_index::StencilIndexField
     μ::T
-    fluid_velocity::GridField
-    fluid_hat::SpectralField
-    k_x::Vector{T}
-    k_y::Vector{T}
-    k_z::Vector{T}
-    forward_fourier_transform::FwdTransform
-    inverse_fourier_transform::InvTransform
+    cells::Cells
+    particles::Particles
+    grid::Grid
+    solver::Solver
+    stencil::Stencil
 end
 
 """
@@ -147,17 +252,28 @@ function _fftw_planner_flag(fft_planning::Symbol)
            fft_planning === :measure ? MEASURE : PATIENT
 end
 
-function FFCMConfig{T}(;
+"""
+    _validate_config_parameters(T; L, R_c, N, a, kernel_widths_ratio, num_grid_points,
+        M_G, viscosity, fft_planning, fft_threads)
+
+Enforces the `FFCMConfig` preconditions (paper §3, §4, §5), throwing `ArgumentError` on the
+first violation. Backend-agnostic; runs before any buffer is allocated. The anisotropy check
+needs the derived grid spacing and lives in `_derive_scalars`.
+
+See the `FFCMConfig` docstring for the full precondition list.
+"""
+function _validate_config_parameters(
+    ::Type{T};
     L::NTuple{3, T},
     R_c::T,
     N::Integer,
-    a::T = T(1),
+    a::T,
     kernel_widths_ratio::T,
     num_grid_points::NTuple{3, Int32},
     M_G::Integer,
     viscosity::T,
-    fft_planning::Symbol = :measure,
-    fft_threads::Integer = 1,
+    fft_planning::Symbol,
+    fft_threads::Integer,
 ) where {T <: AbstractFloat}
     R_c > zero(T) || throw(ArgumentError("R_c must be positive"))
     all(>(zero(T)), L) || throw(ArgumentError("L components must be positive"))
@@ -190,21 +306,34 @@ function FFCMConfig{T}(;
     fft_threads ≥ 1 || throw(ArgumentError(
         "fft_threads must be at least 1; got $(fft_threads)",
     ))
+    return nothing
+end
 
+"""
+    _derive_scalars(T; L, R_c, a, kernel_widths_ratio, num_grid_points) -> NamedTuple
+
+Computes the backend-independent derived scalars and lookup tables from the validated
+parameters (paper §3, §4, §5): the cell-grid geometry, the kernel widths `σ`/`Σ`, the
+isotropic grid spacing `h`, and the per-axis Fourier wavevectors. Throws `ArgumentError`
+if the induced grid spacing is anisotropic (paper §3 assumes uniform `h`).
+
+# Returns
+- `NamedTuple` with `num_cells`, `cell_size`, `inv_cell_size`, `σ`, `Σ`, `h`, `inv_h`, and
+  the host wavevectors `k_x`, `k_y`, `k_z` (the backend assembly moves them to the device).
+
+See `spec/spatial-hashing.md`, `spec/stokes-solve.md`.
+"""
+function _derive_scalars(
+    ::Type{T};
+    L::NTuple{3, T},
+    R_c::T,
+    a::T,
+    kernel_widths_ratio::T,
+    num_grid_points::NTuple{3, Int32},
+) where {T <: AbstractFloat}
     num_cells = ntuple(i -> max(floor(Int32, L[i] / R_c), Int32(3)), 3)
     cell_size = ntuple(i -> L[i] / num_cells[i], 3)
     inv_cell_size = ntuple(i -> one(T) / cell_size[i], 3)
-    cell_hash = Vector{Int32}(undef, N)
-    num_cells_total = prod(Int, num_cells)
-    original_index = Vector{Int32}(undef, N)
-    cell_start = Vector{Int32}(undef, num_cells_total)
-    cell_end = Vector{Int32}(undef, num_cells_total)
-    counting_sort_scratch = Vector{Int32}(undef, num_cells_total)
-    Y_sorted = Matrix{T}(undef, 3, N)
-    F_sorted = Matrix{T}(undef, 3, N)
-    # Scratch the assembled `mobility!` driver folds the caller's positions into,
-    # so the caller's `Y` is never mutated (see `mobility!`, spec/mobility.md).
-    Y_wrapped = Matrix{T}(undef, 3, N)
 
     σ = a / sqrt(T(π))
     Σ = kernel_widths_ratio * σ
@@ -221,32 +350,61 @@ function FFCMConfig{T}(;
     inv_h = one(T) / h
 
     M_x, M_y, M_z = num_grid_points
-    # The grid buffers are allocated unzeroed and zeroed only after the FFT
-    # plans are built on them: the measuring planner levels execute candidate
-    # transforms on the input array, overwriting its contents
-    # (spec/stokes-solve.md).
+    fft_M_x = M_x ÷ Int32(2) + Int32(1)
+    k_x = T[T(2) * T(π) * (i - 1) / L[1] for i in 1:fft_M_x]
+    k_y = _wrap_wavevectors(M_y, L[2])
+    k_z = _wrap_wavevectors(M_z, L[3])
+
+    return (; num_cells, cell_size, inv_cell_size, σ, Σ, h, inv_h, k_x, k_y, k_z)
+end
+
+"""
+    _assemble_cpu_buffers(T, N, num_grid_points, M_G, num_cells_total, k_x, k_y, k_z,
+        fft_planning, fft_threads) -> (cells, particles, grid, solver, stencil)
+
+Allocates the CPU-backed sub-struct buffers and builds the FFTW plans (paper §3, §5). The
+real grid buffers are allocated unzeroed and zeroed only after the plans are built on them:
+the measuring planner efforts execute candidate transforms on the input array, overwriting
+its contents (spec/stokes-solve.md).
+
+# Returns
+- `Tuple` of `CellBuffers`, `ParticleBuffers`, `GridBuffers`, `SolverState`,
+  `StencilBuffers`, all backed by `Array`/`Vector`.
+"""
+function _assemble_cpu_buffers(
+    ::Type{T},
+    N::Integer,
+    num_grid_points::NTuple{3, Int32},
+    M_G::Int32,
+    num_cells_total::Integer,
+    k_x::Vector{T},
+    k_y::Vector{T},
+    k_z::Vector{T},
+    fft_planning::Symbol,
+    fft_threads::Integer,
+) where {T}
+    cells = CellBuffers(
+        Vector{Int32}(undef, N),
+        Vector{Int32}(undef, N),
+        Vector{Int32}(undef, num_cells_total),
+        Vector{Int32}(undef, num_cells_total),
+        Vector{Int32}(undef, num_cells_total),
+    )
+    particles = ParticleBuffers(
+        Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N),
+    )
+
+    M_x, M_y, M_z = num_grid_points
     fx = Array{T, 3}(undef, M_x, M_y, M_z)
     fy = Array{T, 3}(undef, M_x, M_y, M_z)
     fz = Array{T, 3}(undef, M_x, M_y, M_z)
-    force_density = StructArray{SVector{3, T}}((fx, fy, fz))
-
-    M_G_i32 = Int32(M_G)
-    stencil_gaussian = StructArray{SVector{3, T}}((
-        Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32),
-    ))
-    stencil_r² = StructArray{SVector{3, T}}((
-        Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32), Vector{T}(undef, M_G_i32),
-    ))
-    stencil_index = StructArray{SVector{3, Int32}}((
-        Vector{Int32}(undef, M_G_i32),
-        Vector{Int32}(undef, M_G_i32),
-        Vector{Int32}(undef, M_G_i32),
-    ))
-
     ux = Array{T, 3}(undef, M_x, M_y, M_z)
     uy = Array{T, 3}(undef, M_x, M_y, M_z)
     uz = Array{T, 3}(undef, M_x, M_y, M_z)
-    fluid_velocity = StructArray{SVector{3, T}}((ux, uy, uz))
+    grid = GridBuffers(
+        StructArray{SVector{3, T}}((fx, fy, fz)),
+        StructArray{SVector{3, T}}((ux, uy, uz)),
+    )
 
     fft_M_x = M_x ÷ Int32(2) + Int32(1)
     fh_x = Array{Complex{T}, 3}(undef, fft_M_x, M_y, M_z)
@@ -254,19 +412,30 @@ function FFCMConfig{T}(;
     fh_z = Array{Complex{T}, 3}(undef, fft_M_x, M_y, M_z)
     fluid_hat = StructArray{SVector{3, Complex{T}}}((fh_x, fh_y, fh_z))
 
-    # Fourier wavevectors in FFTW's layout. The transform keeps only the
-    # non-negative x-frequencies (indices `1:fft_M_x = M_x÷2 + 1`); the full y/z
-    # axes use the wrap-around order built by `_wrap_wavevectors`.
-    k_x = T[T(2) * T(π) * (i - 1) / L[1] for i in 1:fft_M_x]
-    k_y = _wrap_wavevectors(M_y, L[2])
-    k_z = _wrap_wavevectors(M_z, L[3])
-
     planner_flag = _fftw_planner_flag(fft_planning)
     forward_fourier_transform = plan_rfft(
         fx; flags = planner_flag, num_threads = Int(fft_threads),
     )
     inverse_fourier_transform = plan_brfft(
         fh_x, Int(M_x); flags = planner_flag, num_threads = Int(fft_threads),
+    )
+    solver = SolverState(
+        fluid_hat, k_x, k_y, k_z,
+        forward_fourier_transform, inverse_fourier_transform,
+    )
+
+    stencil = StencilBuffers(
+        StructArray{SVector{3, T}}((
+            Vector{T}(undef, M_G), Vector{T}(undef, M_G), Vector{T}(undef, M_G),
+        )),
+        StructArray{SVector{3, T}}((
+            Vector{T}(undef, M_G), Vector{T}(undef, M_G), Vector{T}(undef, M_G),
+        )),
+        StructArray{SVector{3, Int32}}((
+            Vector{Int32}(undef, M_G),
+            Vector{Int32}(undef, M_G),
+            Vector{Int32}(undef, M_G),
+        )),
     )
 
     for buffer in (fx, fy, fz, ux, uy, uz)
@@ -276,47 +445,90 @@ function FFCMConfig{T}(;
         fill!(buffer, zero(Complex{T}))
     end
 
+    return (cells, particles, grid, solver, stencil)
+end
+
+"""
+    _assemble_gpu_buffers(args...)
+
+Builds the GPU-backed sub-struct buffers and cuFFT plans. The concrete method is supplied by
+the `FFCMCUDAExt` extension; this fallback fires when `gpu_acceleration = true` is requested
+without `using CUDA` having loaded the extension, and reports that requirement.
+
+See `spec/cuda-conventions.md`.
+"""
+_assemble_gpu_buffers(args...) = throw(ArgumentError(
+    "gpu_acceleration = true requires the CUDA backend; run `using CUDA` on a " *
+    "machine with a functional CUDA device before constructing a GPU-backed FFCMConfig",
+))
+
+function FFCMConfig{T}(;
+    L::NTuple{3, T},
+    R_c::T,
+    N::Integer,
+    a::T = T(1),
+    kernel_widths_ratio::T,
+    num_grid_points::NTuple{3, Int32},
+    M_G::Integer,
+    viscosity::T,
+    fft_planning::Symbol = :measure,
+    fft_threads::Integer = 1,
+    gpu_acceleration::Bool = false,
+) where {T <: AbstractFloat}
+    _validate_config_parameters(
+        T;
+        L, R_c, N, a, kernel_widths_ratio, num_grid_points, M_G, viscosity,
+        fft_planning, fft_threads,
+    )
+    derived = _derive_scalars(
+        T; L, R_c, a, kernel_widths_ratio, num_grid_points,
+    )
+    M_G_i32 = Int32(M_G)
+    num_cells_total = prod(Int, derived.num_cells)
+
+    if gpu_acceleration && T === Float64
+        @warn "Float64 throughput on consumer NVIDIA GPUs is a fraction of Float32; " *
+              "consider Float32 for GPU runs"
+    end
+
+    cells, particles, grid, solver, stencil = if gpu_acceleration
+        _assemble_gpu_buffers(
+            T, N, num_grid_points, M_G_i32, num_cells_total,
+            derived.k_x, derived.k_y, derived.k_z, fft_planning, fft_threads,
+        )
+    else
+        _assemble_cpu_buffers(
+            T, N, num_grid_points, M_G_i32, num_cells_total,
+            derived.k_x, derived.k_y, derived.k_z, fft_planning, fft_threads,
+        )
+    end
+
     return FFCMConfig{
         T,
-        typeof(force_density),
-        typeof(fluid_hat),
-        typeof(stencil_gaussian),
-        typeof(stencil_index),
-        typeof(forward_fourier_transform),
-        typeof(inverse_fourier_transform),
+        typeof(cells),
+        typeof(particles),
+        typeof(grid),
+        typeof(solver),
+        typeof(stencil),
     }(
         L,
         R_c,
-        num_cells,
-        cell_size,
-        inv_cell_size,
-        cell_hash,
-        original_index,
-        cell_start,
-        cell_end,
-        counting_sort_scratch,
-        Y_sorted,
-        F_sorted,
-        Y_wrapped,
+        derived.num_cells,
+        derived.cell_size,
+        derived.inv_cell_size,
         a,
-        σ,
-        Σ,
+        derived.σ,
+        derived.Σ,
         num_grid_points,
         M_G_i32,
-        h,
-        inv_h,
-        force_density,
-        stencil_gaussian,
-        stencil_r²,
-        stencil_index,
+        derived.h,
+        derived.inv_h,
         viscosity,
-        fluid_velocity,
-        fluid_hat,
-        k_x,
-        k_y,
-        k_z,
-        forward_fourier_transform,
-        inverse_fourier_transform,
+        cells,
+        particles,
+        grid,
+        solver,
+        stencil,
     )
 end
 
