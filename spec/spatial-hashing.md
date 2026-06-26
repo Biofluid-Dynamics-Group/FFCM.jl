@@ -132,7 +132,7 @@ fp-roundoff corner where $\operatorname{mod}(Y, L_i)$ rounds up to numerically $
 ## Implementation
 
 `assign_cells!(config, Y)` is the hot-path entry for this step: it writes each
-particle's cell index into `config.cell_hash`, assuming `Y` has already been folded into
+particle's cell index into `config.cells.cell_hash`, assuming `Y` has already been folded into
 $\Omega$. It delegates to the function-barrier kernel
 `_assign_cells_kernel!(cell_hash, Y, inv_cell_size, num_cells)`, which takes naked buffers
 and tuples so it is type-stable and independently testable; the kernel performs the floor,

@@ -175,9 +175,9 @@ periodic image.
 
 ### Hot-path input (per `correct_velocities!` call)
 
-- `config.Y_sorted`, `config.F_sorted` — sorted positions and forces (step 2).
-- `config.cell_start`, `config.cell_end` — per-cell sorted-slot ranges (step 2).
-- `config.original_index` — sorted slot to original particle index.
+- `config.particles.Y_sorted`, `config.particles.F_sorted` — sorted positions and forces (step 2).
+- `config.cells.cell_start`, `config.cells.cell_end` — per-cell sorted-slot ranges (step 2).
+- `config.cells.original_index` — sorted slot to original particle index.
 - Positions folded into $[0, L_i)$ by `wrap_positions!` (step 1).
 
 ### Hot-path output
@@ -208,8 +208,8 @@ precondition guarantees a single relevant image and excludes self-image correcti
 
 ## Implementation
 
-`correct_velocities!(V, config)` is the hot-path entry. It reads `config.Y_sorted`,
-`config.F_sorted`, the cell list, and `config.original_index`, and **adds** the pairwise and
+`correct_velocities!(V, config)` is the hot-path entry. It reads `config.particles.Y_sorted`,
+`config.particles.F_sorted`, the cell list, and `config.cells.original_index`, and **adds** the pairwise and
 self corrections in place to `V`, returning `V`. It is allocation-free and type-stable.
 
 It delegates to the function-barrier kernel `_correct_velocities_kernel!`, which takes naked

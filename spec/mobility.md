@@ -32,9 +32,9 @@ The operator is assembled from the six sub-algorithms of §4, applied in order; 
 are seven calls. `mobility!(V, config, Y, F)` runs exactly:
 
 ```
-wrap_positions!(config.Y_wrapped, Y, config.L)        # step 1: fold into [0, L)
-assign_cells!(config, config.Y_wrapped)               # step 1: cell hash
-sort_particles_by_cell!(config, config.Y_wrapped, F)  # step 2: cell list + gather
+wrap_positions!(config.particles.Y_wrapped, Y, config.L)        # step 1: fold into [0, L)
+assign_cells!(config, config.particles.Y_wrapped)               # step 1: cell hash
+sort_particles_by_cell!(config, config.particles.Y_wrapped, F)  # step 2: cell list + gather
 spread_forces!(config)                                # step 3: J̃†  (forces → density)
 stokes_solve!(config)                                 # step 4: L⁻¹ (FFT Stokes solve)
 interpolate_velocities!(V, config)                    # step 5: J̃   (velocity → particles)
@@ -83,6 +83,24 @@ configuration is fixed at construction. Two equivalent forms set it:
 Both forms run the same parameter validation; the parameter meanings and the individual
 preconditions are documented on the `FFCMConfig` docstring.
 
+The compiled buffers are grouped into five sub-structs — `config.cells` (cell-list
+bookkeeping), `config.particles` (the $3 \times N$ sorted/wrapped position and force
+buffers), `config.grid` (the real-space force and velocity fields), `config.solver` (the
+Fourier-space field, wavevectors, and FFT plans), and `config.stencil` (per-particle stencil
+workspace) — while the derived scalars stay flat on the config. The sub-structs are
+parameterized by their storage type, so the backend is a type-parameter swap.
+
+### Backend selection
+
+The `gpu_acceleration::Bool = false` keyword chooses the backend. It is consumed once at
+construction to route to the per-backend buffer/plan assembly and is **not stored**: the
+backend is encoded in the config's sub-struct storage types, so the choice never reaches the
+`mobility!` hot path and the step dispatch stays static. `gpu_acceleration = true` requires
+the `CUDA` extension (`using CUDA`) on a functional CUDA device, otherwise construction
+throws `ArgumentError`; `Float64` on the GPU additionally emits a non-fatal warning. The
+backend architecture and the CPU↔CUDA parity contract are specified in
+[cuda-conventions.md](cuda-conventions.md).
+
 ### `mobility!(V, config, Y, F)`
 
 - `Y`, `F`, `V` are caller-owned $3 \times N$ matrices (column $n$ is particle $n$, row $i$
@@ -93,8 +111,8 @@ preconditions are documented on the `FFCMConfig` docstring.
   check keeps the happy path allocation-free.
 - Reads `Y` and `F`; writes `V` in the caller's **original** particle order; returns `V`.
 - Does **not** mutate `Y` or `F`: positions are folded into $[0, L_i)$ in the `config`-owned
-  buffer `Y_wrapped`, never in the caller's array, so an operator that closes over a fixed
-  `Y` never sees its positions change underneath it.
+  buffer `config.particles.Y_wrapped`, never in the caller's array, so an operator that closes
+  over a fixed `Y` never sees its positions change underneath it.
 - Allocation-free and type-stable once `config` is built.
 
 ### `FFCMMobility(config, Y)`

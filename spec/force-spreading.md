@@ -129,12 +129,12 @@ grid on some axis would wrap distinct stencil points onto the same grid point.
 
 ### Hot-path input (per `mobility!` call, populated by steps 1–2)
 
-- `config.Y_sorted`, `config.F_sorted` (shape $(3, N)$) — sorted positions and
+- `config.particles.Y_sorted`, `config.particles.F_sorted` (shape $(3, N)$) — sorted positions and
   forces from `sort_particles_by_cell!`.
 
 ### Hot-path output
 
-- `config.force_density` populated with $\tilde{\mathcal{J}}^\dagger[\mathcal{F}](\boldsymbol{x}_g)$
+- `config.grid.force_density` populated with $\tilde{\mathcal{J}}^\dagger[\mathcal{F}](\boldsymbol{x}_g)$
   at every grid point $\boldsymbol{x}_g = ((i_x - 1)h, (i_y - 1)h, (i_z - 1)h)$
   for $i_x \in 1{:}M_x$, $i_y \in 1{:}M_y$, $i_z \in 1{:}M_z$. The grid is zeroed
   at the start of the call.
@@ -163,8 +163,8 @@ interior particle.
 ## Implementation
 
 `spread_forces!(config)` is the hot-path entry point. It reads the sorted
-positions and forces `config.Y_sorted`, `config.F_sorted`, writes the spread force
-field into `config.force_density` (zeroed at the start of the call), and returns
+positions and forces `config.particles.Y_sorted`, `config.particles.F_sorted`, writes the spread force
+field into `config.grid.force_density` (zeroed at the start of the call), and returns
 `config`. It allocates nothing and is type-stable, so it can run on every
 iteration of a downstream solve. The grid and the per-particle scratch buffers are
 built once on the cold path, by the `FFCMConfig` constructor (its inputs and

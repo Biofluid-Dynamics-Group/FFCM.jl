@@ -147,19 +147,19 @@ Cold-path validation (constructor addition): $\mu > 0$,
 
 ### Hot-path input (per `stokes_solve!` call)
 
-- `config.force_density` — the spread force field
+- `config.grid.force_density` — the spread force field
   $\tilde{\mathcal{J}}^\dagger[\mathcal{F}](\boldsymbol{x}_g)$ from `spread_forces!`.
 
 ### Hot-path output
 
-- `config.fluid_velocity` — the fluid velocity $\boldsymbol{u}(\boldsymbol{x}_g)$ at every
+- `config.grid.fluid_velocity` — the fluid velocity $\boldsymbol{u}(\boldsymbol{x}_g)$ at every
   grid point, satisfying the discrete periodic Stokes equations.
 
 ### Side effects
 
-- `config.fluid_hat` is overwritten with intermediate Fourier-domain data; it carries no
+- `config.solver.fluid_hat` is overwritten with intermediate Fourier-domain data; it carries no
   between-call invariant.
-- `config.force_density` is **not** modified (the step-3 output is preserved for
+- `config.grid.force_density` is **not** modified (the step-3 output is preserved for
   debuggability).
 
 ### Periodicity contract
@@ -178,8 +178,8 @@ solution at the chosen grid resolution.
 
 ## Implementation
 
-`stokes_solve!(config)` is the hot-path entry. It reads `config.force_density`, writes
-`config.fluid_velocity`, and overwrites `config.fluid_hat`, returning `config`. It runs in
+`stokes_solve!(config)` is the hot-path entry. It reads `config.grid.force_density`, writes
+`config.grid.fluid_velocity`, and overwrites `config.solver.fluid_hat`, returning `config`. It runs in
 three stages: a forward r2c FFT of each of the three force components into `fluid_hat`; the
 per-mode projection applied in place on `fluid_hat`; and a backward c2r FFT of each
 component into `fluid_velocity`. It is allocation-free and type-stable.

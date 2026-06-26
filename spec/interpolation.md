@@ -102,10 +102,10 @@ scratch is safe.
 
 ### Hot-path input (per `interpolate_velocities!` call)
 
-- `config.fluid_velocity` — the fluid velocity field $\boldsymbol{u}(\boldsymbol{x}_g)$ from
+- `config.grid.fluid_velocity` — the fluid velocity field $\boldsymbol{u}(\boldsymbol{x}_g)$ from
   `stokes_solve!`.
-- `config.Y_sorted` — sorted particle positions (step 2), folded into $[0, L_i)$.
-- `config.original_index` — sorted slot to original particle index (step 2), for the
+- `config.particles.Y_sorted` — sorted particle positions (step 2), folded into $[0, L_i)$.
+- `config.cells.original_index` — sorted slot to original particle index (step 2), for the
   scatter-back to the caller's order.
 
 ### Hot-path output
@@ -119,7 +119,7 @@ scratch is safe.
 
 - The stencil scratch fields are overwritten with the last particle's values; they carry
   no between-call invariant (shared with step 3).
-- `config.fluid_velocity` is **not** modified.
+- `config.grid.fluid_velocity` is **not** modified.
 
 ### Periodicity contract
 
@@ -138,8 +138,8 @@ a stencil wider than the grid would double-weight a grid point in this adjoint o
 
 ## Implementation
 
-`interpolate_velocities!(V, config)` is the hot-path entry. It reads `config.fluid_velocity`,
-`config.Y_sorted`, and `config.original_index`, and writes the particle velocities into `V`
+`interpolate_velocities!(V, config)` is the hot-path entry. It reads `config.grid.fluid_velocity`,
+`config.particles.Y_sorted`, and `config.cells.original_index`, and writes the particle velocities into `V`
 in the caller's original order, returning `V`. It is allocation-free and type-stable.
 
 It delegates to the function-barrier kernel `_interpolate_velocities_kernel!`, which takes

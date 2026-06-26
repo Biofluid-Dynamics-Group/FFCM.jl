@@ -55,7 +55,7 @@ Sizes use `N` and the total cell count $m_x m_y m_z$.
 
 ### Hot-path input (per `mobility!` call)
 
-- `config` with a **current** `config.cell_hash`, i.e. `assign_cells!` has run since `Y`
+- `config` with a **current** `config.cells.cell_hash`, i.e. `assign_cells!` has run since `Y`
   last changed (see [spatial-hashing.md](spatial-hashing.md)).
 - `Y`, `F` (`AbstractMatrix{T}`, shape `(3, N)`) — particle positions and forces in the
   caller's original order.
@@ -76,7 +76,7 @@ dense suspension.
 ## Implementation
 
 `sort_particles_by_cell!(config, Y, F)` is the hot-path entry. Assuming
-`config.cell_hash` is current, it builds the cell list and gathers the sorted data into
+`config.cells.cell_hash` is current, it builds the cell list and gathers the sorted data into
 `config`, returning `config`. It is allocation-free and type-stable. It delegates to two
 function-barrier kernels that take naked buffers, so each is independently testable and
 fully specialised:
