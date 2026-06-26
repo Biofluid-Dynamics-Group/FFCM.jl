@@ -136,14 +136,14 @@ for T in (Float32, Float64), name in _selected_sizes()
     # change moved. Step keys are the step entry-point names.
     steps = cpu["steps"]
     steps["wrap_positions"][string(T)][name] = _budgeted(
-        (@benchmarkable wrap_positions!($(config.Y_wrapped), $Y, $(config.L)));
+        (@benchmarkable wrap_positions!($(config.particles.Y_wrapped), $Y, $(config.L)));
         seconds = 1,
     )
     steps["assign_cells"][string(T)][name] = _budgeted(
-        (@benchmarkable assign_cells!($config, $(config.Y_wrapped))); seconds = 1,
+        (@benchmarkable assign_cells!($config, $(config.particles.Y_wrapped))); seconds = 1,
     )
     steps["sort_particles_by_cell"][string(T)][name] = _budgeted(
-        (@benchmarkable sort_particles_by_cell!($config, $(config.Y_wrapped), $F));
+        (@benchmarkable sort_particles_by_cell!($config, $(config.particles.Y_wrapped), $F));
         seconds = 1,
     )
     steps["spread_forces"][string(T)][name] = _budgeted(

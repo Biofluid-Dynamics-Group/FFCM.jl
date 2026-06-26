@@ -41,12 +41,12 @@ end
         L = L, R_c = 1.0, N = N, _fcm_grid_kwargs(L)...,
     )
     total = prod(Int(c) for c in config.num_cells)
-    @test length(config.original_index) == N
-    @test length(config.cell_start) == total
-    @test length(config.cell_end) == total
-    @test length(config.counting_sort_scratch) == total
-    @test size(config.Y_sorted) == (3, N)
-    @test size(config.F_sorted) == (3, N)
+    @test length(config.cells.original_index) == N
+    @test length(config.cells.cell_start) == total
+    @test length(config.cells.cell_end) == total
+    @test length(config.cells.counting_sort_scratch) == total
+    @test size(config.particles.Y_sorted) == (3, N)
+    @test size(config.particles.F_sorted) == (3, N)
 end
 
 @testset "Constructor rejects non-physical inputs" begin

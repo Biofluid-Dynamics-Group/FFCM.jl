@@ -115,10 +115,10 @@ end
         L = L,
         num_grid_points = M,
     )
-    @test config.force_density isa StructArray
-    @test size(config.force_density) == (8, 12, 16)
-    @test eltype(config.force_density) == SVector{3, Float64}
-    components = StructArrays.components(config.force_density)
+    @test config.grid.force_density isa StructArray
+    @test size(config.grid.force_density) == (8, 12, 16)
+    @test eltype(config.grid.force_density) == SVector{3, Float64}
+    components = StructArrays.components(config.grid.force_density)
     @test length(components) == 3
     @test all(c -> c isa Array{Float64, 3}, components)
     @test all(c -> size(c) == (8, 12, 16), components)
@@ -132,12 +132,12 @@ end
         num_grid_points = (Int32(16), Int32(16), Int32(16)),
         M_G = 10,
     )
-    @test length(config.stencil_gaussian) == 10
-    @test length(config.stencil_r²) == 10
-    @test length(config.stencil_index) == 10
-    @test eltype(config.stencil_gaussian) == SVector{3, Float64}
-    @test eltype(config.stencil_r²) == SVector{3, Float64}
-    @test eltype(config.stencil_index) == SVector{3, Int32}
+    @test length(config.stencil.stencil_gaussian) == 10
+    @test length(config.stencil.stencil_r²) == 10
+    @test length(config.stencil.stencil_index) == 10
+    @test eltype(config.stencil.stencil_gaussian) == SVector{3, Float64}
+    @test eltype(config.stencil.stencil_r²) == SVector{3, Float64}
+    @test eltype(config.stencil.stencil_index) == SVector{3, Int32}
 end
 
 @testset "Cold-path validation works for Float32 as well as Float64" begin
@@ -153,7 +153,7 @@ end
     @test config.σ ≈ 1.0f0 / sqrt(Float32(π))
     @test config.Σ ≈ 2.0f0 * config.σ
     @test config.h ≈ 0.5f0
-    @test eltype(config.force_density) == SVector{3, Float32}
+    @test eltype(config.grid.force_density) == SVector{3, Float32}
 end
 
 @testset "Element type is inferred from the domain lengths" begin

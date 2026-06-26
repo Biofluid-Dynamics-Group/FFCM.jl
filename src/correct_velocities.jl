@@ -133,9 +133,9 @@ scalars of `_correction_scalars` and the closed-form self term. The result compl
 # Arguments
 - `V::AbstractMatrix{T}`: the `3xN` velocity matrix to correct in place (the output of
   `interpolate_velocities!`, in original particle order).
-- `config::FFCMConfig{T}`: the compiled configuration. Reads `config.Y_sorted`,
-  `config.F_sorted`, the cell list (`config.cell_start` / `config.cell_end`), and
-  `config.original_index` (populated by `sort_particles_by_cell!`).
+- `config::FFCMConfig{T}`: the compiled configuration. Reads `config.particles.Y_sorted`,
+  `config.particles.F_sorted`, the cell list (`config.cells.cell_start` / `config.cells.cell_end`), and
+  `config.cells.original_index` (populated by `sort_particles_by_cell!`).
 
 # Returns
 - `V`: the same matrix, with the pairwise + self correction added.
@@ -145,11 +145,11 @@ See `spec/pairwise-correction.md`.
 function correct_velocities!(V::AbstractMatrix{T}, config::FFCMConfig{T}) where {T}
     _correct_velocities_kernel!(
         V,
-        config.Y_sorted,
-        config.F_sorted,
-        config.cell_start,
-        config.cell_end,
-        config.original_index,
+        config.particles.Y_sorted,
+        config.particles.F_sorted,
+        config.cells.cell_start,
+        config.cells.cell_end,
+        config.cells.original_index,
         config.num_cells,
         config.L,
         config.σ,

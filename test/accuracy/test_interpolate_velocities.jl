@@ -32,11 +32,11 @@ using StructArrays: components
               (T(4.5), T(4.6), T(4.7)),
               (T(5.2), T(2.7), T(5.4)))
         for n in 1:N, i in 1:3
-            config.Y_sorted[i, n] = Ys[n][i]
+            config.particles.Y_sorted[i, n] = Ys[n][i]
         end
-        config.original_index .= Int32.(1:N)
+        config.cells.original_index .= Int32.(1:N)
 
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         for (idx, I) in enumerate(CartesianIndices(ux))
             ux[I] = sin(T(0.3) * idx)
             uy[I] = cos(T(0.2) * idx)
@@ -47,14 +47,14 @@ using StructArrays: components
         V = zeros(T, 3, N)
         interpolate_velocities!(V, config)
 
-        fx, fy, fz = components(config.force_density)
+        fx, fy, fz = components(config.grid.force_density)
         u_comp = (ux, uy, uz)
         f_comp = (fx, fy, fz)
         rtol = sqrt(eps(T))
         atol = _near_zero_atol(T)
         for n in 1:N, c in 1:3
-            fill!(config.F_sorted, zero(T))
-            config.F_sorted[c, n] = one(T)
+            fill!(config.particles.F_sorted, zero(T))
+            config.particles.F_sorted[c, n] = one(T)
             spread_forces!(config)
             adjoint_value = h³ * sum(u_comp[c] .* f_comp[c])
             @test V[c, n] ≈ adjoint_value rtol = rtol atol = atol
@@ -91,7 +91,7 @@ end
         wrap_positions!(Y, config.L)
         assign_cells!(config, Y)
         sort_particles_by_cell!(config, Y, F)
-        @test config.original_index != Int32.(1:N)
+        @test config.cells.original_index != Int32.(1:N)
 
         deterministic_field! = function (grid)
             gx, gy, gz = components(grid)
@@ -101,7 +101,7 @@ end
                 gz[I] = sin(T(0.23) * idx - T(0.3))
             end
         end
-        deterministic_field!(config.fluid_velocity)
+        deterministic_field!(config.grid.fluid_velocity)
 
         V = zeros(T, 3, N)
         interpolate_velocities!(V, config)
@@ -113,15 +113,15 @@ end
             num_grid_points = (M, M, M),
             M_G = 8,
         )
-        ref.original_index[1] = Int32(1)
-        deterministic_field!(ref.fluid_velocity)
+        ref.cells.original_index[1] = Int32(1)
+        deterministic_field!(ref.grid.fluid_velocity)
         Vn = zeros(T, 3, 1)
         rtol = sqrt(eps(T))
         atol = _near_zero_atol(T)
         for n in 1:N
-            ref.Y_sorted[1, 1] = Y[1, n]
-            ref.Y_sorted[2, 1] = Y[2, n]
-            ref.Y_sorted[3, 1] = Y[3, n]
+            ref.particles.Y_sorted[1, 1] = Y[1, n]
+            ref.particles.Y_sorted[2, 1] = Y[2, n]
+            ref.particles.Y_sorted[3, 1] = Y[3, n]
             interpolate_velocities!(Vn, ref)
             @test isapprox(V[:, n], Vn[:, 1]; rtol = rtol, atol = atol)
         end
@@ -144,13 +144,13 @@ end
             M_G = 8,
         )
         Y_n = (T(2), T(2), T(2))
-        config.Y_sorted[1, 1] = Y_n[1]
-        config.Y_sorted[2, 1] = Y_n[2]
-        config.Y_sorted[3, 1] = Y_n[3]
-        config.original_index[1] = Int32(1)
+        config.particles.Y_sorted[1, 1] = Y_n[1]
+        config.particles.Y_sorted[2, 1] = Y_n[2]
+        config.particles.Y_sorted[3, 1] = Y_n[3]
+        config.cells.original_index[1] = Int32(1)
 
         σ, Σ, h = config.σ, config.Σ, config.h
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         for (idx, I) in enumerate(CartesianIndices(ux))
             ux[I] = sin(T(0.3) * idx)
             uy[I] = cos(T(0.2) * idx)
@@ -204,12 +204,12 @@ end
               (T(11.7), T(2.9), T(13.4)),
               (T(0.4), T(15.6), T(7.2)))
         for n in 1:N, i in 1:3
-            config.Y_sorted[i, n] = Ys[n][i]
+            config.particles.Y_sorted[i, n] = Ys[n][i]
         end
-        config.original_index .= Int32.(1:N)
+        config.cells.original_index .= Int32.(1:N)
 
         U = (T(0.7), -T(1.3), T(2.1))
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         fill!(ux, U[1])
         fill!(uy, U[2])
         fill!(uz, U[3])
@@ -240,9 +240,9 @@ end
             num_grid_points = (M, M, M),
             M_G = 8,
         )
-        config.Y_sorted[:, 1] .= (T(3.1), T(3.6), T(4.2))
-        config.Y_sorted[:, 2] .= (T(5.5), T(4.4), T(2.9))
-        config.original_index .= Int32.(1:N)
+        config.particles.Y_sorted[:, 1] .= (T(3.1), T(3.6), T(4.2))
+        config.particles.Y_sorted[:, 2] .= (T(5.5), T(4.4), T(2.9))
+        config.cells.original_index .= Int32.(1:N)
 
         field1!(grid) = begin
             gx, gy, gz = components(grid)
@@ -262,13 +262,13 @@ end
         end
 
         α, β = T(1.7), -T(2.3)
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
 
-        field1!(config.fluid_velocity)
+        field1!(config.grid.fluid_velocity)
         V1 = zeros(T, 3, N); interpolate_velocities!(V1, config)
         u1 = (copy(ux), copy(uy), copy(uz))
 
-        field2!(config.fluid_velocity)
+        field2!(config.grid.fluid_velocity)
         V2 = zeros(T, 3, N); interpolate_velocities!(V2, config)
         u2 = (copy(ux), copy(uy), copy(uz))
 
@@ -299,10 +299,10 @@ end
             num_grid_points = (M, M, M),
             M_G = 8,
         )
-        config.original_index[1] = Int32(1)
+        config.cells.original_index[1] = Int32(1)
         h = config.h
 
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         base = ntuple(_ -> Array{T}(undef, Int(M), Int(M), Int(M)), 3)
         for (idx, I) in enumerate(CartesianIndices(ux))
             base[1][I] = sin(T(0.3) * idx)
@@ -312,7 +312,7 @@ end
 
         Y_a = (T(3.4), T(4.7), T(5.2))
         ux .= base[1]; uy .= base[2]; uz .= base[3]
-        config.Y_sorted[:, 1] .= Y_a
+        config.particles.Y_sorted[:, 1] .= Y_a
         Va = zeros(T, 3, 1); interpolate_velocities!(Va, config)
 
         # circshift by +1 along x sends content at ix to ix+1, matching the
@@ -320,7 +320,7 @@ end
         ux .= circshift(base[1], (1, 0, 0))
         uy .= circshift(base[2], (1, 0, 0))
         uz .= circshift(base[3], (1, 0, 0))
-        config.Y_sorted[:, 1] .= (Y_a[1] + h, Y_a[2], Y_a[3])
+        config.particles.Y_sorted[:, 1] .= (Y_a[1] + h, Y_a[2], Y_a[3])
         Vb = zeros(T, 3, 1); interpolate_velocities!(Vb, config)
 
         rtol = sqrt(eps(T))
@@ -347,13 +347,13 @@ end
             M_G = 16,
         )
         Y_n = (T(4), T(4), T(4))
-        config.Y_sorted[1, 1] = Y_n[1]
-        config.Y_sorted[2, 1] = Y_n[2]
-        config.Y_sorted[3, 1] = Y_n[3]
-        config.original_index[1] = Int32(1)
+        config.particles.Y_sorted[1, 1] = Y_n[1]
+        config.particles.Y_sorted[2, 1] = Y_n[2]
+        config.particles.Y_sorted[3, 1] = Y_n[3]
+        config.cells.original_index[1] = Int32(1)
 
         σ, h = config.σ, config.h
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         for (idx, I) in enumerate(CartesianIndices(ux))
             ux[I] = sin(T(0.21) * idx)
             uy[I] = cos(T(0.16) * idx)

@@ -105,14 +105,14 @@ particles sharing a cell are contiguous in memory.
 
 On return, `config` holds:
 
-- `config.original_index` — sorted slot `s` to original particle index.
-- `config.cell_start[c+1] : config.cell_end[c+1]` — 1-based inclusive range of
+- `config.cells.original_index` — sorted slot `s` to original particle index.
+- `config.cells.cell_start[c+1] : config.cells.cell_end[c+1]` — 1-based inclusive range of
   sorted slots occupied by cell `c` (empty range if the cell is empty).
-- `config.Y_sorted`, `config.F_sorted` — `Y` and `F` in sorted order.
+- `config.particles.Y_sorted`, `config.particles.F_sorted` — `Y` and `F` in sorted order.
 
 # Arguments
 - `config::FFCMConfig{T}`: the compiled configuration; the sort outputs are written into its
-  buffers. Assumes `config.cell_hash` is current, i.e. `assign_cells!(config, Y)` ran since
+  buffers. Assumes `config.cells.cell_hash` is current, i.e. `assign_cells!(config, Y)` ran since
   `Y` last changed.
 - `Y::AbstractMatrix{T}`, `F::AbstractMatrix{T}`: the `3xN` positions and forces
   to gather into sorted order.
@@ -126,14 +126,14 @@ function sort_particles_by_cell!(
     config::FFCMConfig{T}, Y::AbstractMatrix{T}, F::AbstractMatrix{T},
 ) where {T}
     _build_cell_list_kernel!(
-        config.original_index,
-        config.cell_start,
-        config.cell_end,
-        config.counting_sort_scratch,
-        config.cell_hash,
+        config.cells.original_index,
+        config.cells.cell_start,
+        config.cells.cell_end,
+        config.cells.counting_sort_scratch,
+        config.cells.cell_hash,
     )
     _gather_particles_kernel!(
-        config.Y_sorted, config.F_sorted, Y, F, config.original_index,
+        config.particles.Y_sorted, config.particles.F_sorted, Y, F, config.cells.original_index,
     )
     return config
 end
@@ -184,27 +184,27 @@ function _gather_particles_kernel!(
 end
 
 """
-    assign_cells!(config, Y) -> config.cell_hash
+    assign_cells!(config, Y) -> config.cells.cell_hash
 
 Step 1 of the Fast FCM algorithm (Su & Keaveny 2024, §4). Write each particle's cell index
-into `config.cell_hash`. The hash linearises the 3-D cell coordinate with `x` fastest and
+into `config.cells.cell_hash`. The hash linearises the 3-D cell coordinate with `x` fastest and
 `z` slowest.
 
 # Arguments
-- `config::FFCMConfig{T}`: the compiled configuration; `config.cell_hash` is overwritten.
+- `config::FFCMConfig{T}`: the compiled configuration; `config.cells.cell_hash` is overwritten.
 - `Y::AbstractMatrix{T}`: the `3xN` positions, already folded into the canonical domain by
   `wrap_positions!`.
 
 # Returns
-- `config.cell_hash`: the per-particle 0-based cell indices.
+- `config.cells.cell_hash`: the per-particle 0-based cell indices.
 
 See `spec/spatial-hashing.md`.
 """
 function assign_cells!(config::FFCMConfig{T}, Y::AbstractMatrix{T}) where {T}
     _assign_cells_kernel!(
-        config.cell_hash, Y, config.inv_cell_size, config.num_cells,
+        config.cells.cell_hash, Y, config.inv_cell_size, config.num_cells,
     )
-    return config.cell_hash
+    return config.cells.cell_hash
 end
 
 """

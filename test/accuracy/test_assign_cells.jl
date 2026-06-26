@@ -9,13 +9,13 @@ using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!
         L = L, R_c = 1.0, N = 64, _fcm_grid_kwargs(L)...,
     )
     rng = Xoshiro(2024)
-    Y = [config.L[i] * rand(rng) for i in 1:3, _ in 1:length(config.cell_hash)]
+    Y = [config.L[i] * rand(rng) for i in 1:3, _ in 1:length(config.cells.cell_hash)]
     wrap_positions!(Y, config.L)
     Y_for_kernel = copy(Y)
-    expected = Vector{Int32}(undef, length(config.cell_hash))
+    expected = Vector{Int32}(undef, length(config.cells.cell_hash))
     _assign_cells_kernel!(expected, Y_for_kernel, config.inv_cell_size, config.num_cells)
     assign_cells!(config, Y)
-    @test config.cell_hash == expected
+    @test config.cells.cell_hash == expected
 end
 
 @testset "assign_cells! returns the config's cell_hash buffer" begin
@@ -25,5 +25,5 @@ end
     )
     Y = Float64[0.5; 0.5; 0.5;;]
     returned = assign_cells!(config, Y)
-    @test returned === config.cell_hash
+    @test returned === config.cells.cell_hash
 end

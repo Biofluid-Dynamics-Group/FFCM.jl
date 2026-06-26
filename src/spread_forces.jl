@@ -3,33 +3,33 @@
 
 Step 3 of the Fast FCM algorithm (Su & Keaveny 2024, §4; the spreading operator
 of §3 equation (25)). Evaluate the spread force density `J̃†[F](x_g) = Σₙ Fₙ Δ̃ₙ(x_g; Σ)` on
-every grid point `x_g`, writing the result into `config.force_density` (zeroed at the start
+every grid point `x_g`, writing the result into `config.grid.force_density` (zeroed at the start
 of the call).
 
 # Arguments
-- `config::FFCMConfig{T}`: the compiled configuration. Reads `config.Y_sorted` and
-  `config.F_sorted` (populated by `sort_particles_by_cell!`).
+- `config::FFCMConfig{T}`: the compiled configuration. Reads `config.particles.Y_sorted` and
+  `config.particles.F_sorted` (populated by `sort_particles_by_cell!`).
 
 # Returns
-- `config`: the same configuration, with `config.force_density` overwritten by the spread
+- `config`: the same configuration, with `config.grid.force_density` overwritten by the spread
   force density.
 
 See `spec/force-spreading.md`.
 """
 function spread_forces!(config::FFCMConfig{T}) where {T}
     _spread_forces_kernel!(
-        config.force_density,
-        config.Y_sorted,
-        config.F_sorted,
+        config.grid.force_density,
+        config.particles.Y_sorted,
+        config.particles.F_sorted,
         config.σ,
         config.Σ,
         config.h,
         config.inv_h,
         config.num_grid_points,
         config.M_G,
-        config.stencil_gaussian,
-        config.stencil_r²,
-        config.stencil_index,
+        config.stencil.stencil_gaussian,
+        config.stencil.stencil_r²,
+        config.stencil.stencil_index,
     )
     return config
 end

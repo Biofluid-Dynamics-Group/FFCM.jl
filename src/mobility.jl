@@ -28,15 +28,15 @@ function mobility!(
     Y::AbstractMatrix{T},
     F::AbstractMatrix{T},
 ) where {T}
-    N = size(config.Y_sorted, 2)
+    N = size(config.particles.Y_sorted, 2)
     (size(V) == (3, N) && size(Y) == (3, N) && size(F) == (3, N)) ||
         throw(DimensionMismatch(
             "V, Y, and F must each be 3xN for the config's N = $(N); got " *
             "size(V) = $(size(V)), size(Y) = $(size(Y)), size(F) = $(size(F))",
         ))
-    wrap_positions!(config.Y_wrapped, Y, config.L)
-    assign_cells!(config, config.Y_wrapped)
-    sort_particles_by_cell!(config, config.Y_wrapped, F)
+    wrap_positions!(config.particles.Y_wrapped, Y, config.L)
+    assign_cells!(config, config.particles.Y_wrapped)
+    sort_particles_by_cell!(config, config.particles.Y_wrapped, F)
     spread_forces!(config)
     stokes_solve!(config)
     interpolate_velocities!(V, config)
@@ -85,9 +85,9 @@ end
 function FFCMMobility(config::FFCMConfig{T}, Y::AbstractMatrix{T}) where {T}
     size(Y, 1) == 3 || throw(ArgumentError("Y must be 3xN; got size $(size(Y))"))
     N = size(Y, 2)
-    N == size(config.Y_sorted, 2) || throw(ArgumentError(
+    N == size(config.particles.Y_sorted, 2) || throw(ArgumentError(
         "Y has $(N) particles but config was built for " *
-        "$(size(config.Y_sorted, 2)); construct a config with matching N",
+        "$(size(config.particles.Y_sorted, 2)); construct a config with matching N",
     ))
     return FFCMMobility{T, typeof(config)}(
         config, Y, Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N),

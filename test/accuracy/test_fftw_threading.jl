@@ -30,7 +30,7 @@ using FFCM: stokes_solve!
         stokes_solve!(config_serial)
         stokes_solve!(config_threaded)
         @test all(isapprox.(
-            config_threaded.fluid_velocity, config_serial.fluid_velocity;
+            config_threaded.grid.fluid_velocity, config_serial.grid.fluid_velocity;
             rtol = sqrt(eps(T)), atol = _near_zero_atol(T),
         ))
     end

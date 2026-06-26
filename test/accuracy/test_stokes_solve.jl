@@ -37,10 +37,10 @@ end
     M = (Int32(8), Int32(12), Int32(16))
     L = (4.0, 6.0, 8.0)
     config = FFCMConfig{Float64}(; _STOKES_KWARGS..., L = L, num_grid_points = M)
-    @test config.fluid_velocity isa StructArray
-    @test size(config.fluid_velocity) == (8, 12, 16)
-    @test eltype(config.fluid_velocity) == SVector{3, Float64}
-    comps = components(config.fluid_velocity)
+    @test config.grid.fluid_velocity isa StructArray
+    @test size(config.grid.fluid_velocity) == (8, 12, 16)
+    @test eltype(config.grid.fluid_velocity) == SVector{3, Float64}
+    comps = components(config.grid.fluid_velocity)
     @test length(comps) == 3
     @test all(c -> c isa Array{Float64, 3}, comps)
     @test all(c -> size(c) == (8, 12, 16), comps)
@@ -54,10 +54,10 @@ end
     M = (Int32(8), Int32(12), Int32(16))
     L = (4.0, 6.0, 8.0)
     config = FFCMConfig{Float64}(; _STOKES_KWARGS..., L = L, num_grid_points = M)
-    @test config.fluid_hat isa StructArray
-    @test size(config.fluid_hat) == (8 ÷ 2 + 1, 12, 16)
-    @test eltype(config.fluid_hat) == SVector{3, ComplexF64}
-    comps = components(config.fluid_hat)
+    @test config.solver.fluid_hat isa StructArray
+    @test size(config.solver.fluid_hat) == (8 ÷ 2 + 1, 12, 16)
+    @test eltype(config.solver.fluid_hat) == SVector{3, ComplexF64}
+    comps = components(config.solver.fluid_hat)
     @test length(comps) == 3
     @test all(c -> c isa Array{ComplexF64, 3}, comps)
     @test all(c -> size(c) == (8 ÷ 2 + 1, 12, 16), comps)
@@ -71,24 +71,24 @@ end
     M = (Int32(8), Int32(12), Int32(16))
     L = (4.0, 6.0, 8.0)
     config = FFCMConfig{Float64}(; _STOKES_KWARGS..., L = L, num_grid_points = M)
-    @test length(config.k_x) == M[1] ÷ 2 + 1
-    @test length(config.k_y) == M[2]
-    @test length(config.k_z) == M[3]
+    @test length(config.solver.k_x) == M[1] ÷ 2 + 1
+    @test length(config.solver.k_y) == M[2]
+    @test length(config.solver.k_z) == M[3]
 
-    @test config.k_x[1] ≈ 0
-    @test config.k_x[2] ≈ 2π / L[1]
-    @test config.k_x[end] ≈ 2π / L[1] * (M[1] ÷ 2)
+    @test config.solver.k_x[1] ≈ 0
+    @test config.solver.k_x[2] ≈ 2π / L[1]
+    @test config.solver.k_x[end] ≈ 2π / L[1] * (M[1] ÷ 2)
 
-    @test config.k_y[1] ≈ 0
-    @test config.k_y[2] ≈ 2π / L[2]
-    @test config.k_y[M[2] ÷ 2 + 1] ≈ 2π / L[2] * (M[2] ÷ 2)
+    @test config.solver.k_y[1] ≈ 0
+    @test config.solver.k_y[2] ≈ 2π / L[2]
+    @test config.solver.k_y[M[2] ÷ 2 + 1] ≈ 2π / L[2] * (M[2] ÷ 2)
     # First negative wavenumber: index M_y/2 + 2 → physical n = -M_y/2 + 1
-    @test config.k_y[M[2] ÷ 2 + 2] ≈ 2π / L[2] * (-(M[2] ÷ 2) + 1)
-    @test config.k_y[end] ≈ 2π / L[2] * (-1)
+    @test config.solver.k_y[M[2] ÷ 2 + 2] ≈ 2π / L[2] * (-(M[2] ÷ 2) + 1)
+    @test config.solver.k_y[end] ≈ 2π / L[2] * (-1)
 
-    @test config.k_z[1] ≈ 0
-    @test config.k_z[M[3] ÷ 2 + 1] ≈ 2π / L[3] * (M[3] ÷ 2)
-    @test config.k_z[end] ≈ 2π / L[3] * (-1)
+    @test config.solver.k_z[1] ≈ 0
+    @test config.solver.k_z[M[3] ÷ 2 + 1] ≈ 2π / L[3] * (M[3] ÷ 2)
+    @test config.solver.k_z[end] ≈ 2π / L[3] * (-1)
 end
 
 @testset "FFTW plans are cold-path fields ready for hot-path mul!" begin
@@ -97,8 +97,8 @@ end
     # FFCMConfig's type parameters; failing to specialise here would
     # surface as a type-instability downstream.
     config = FFCMConfig{Float64}(; _STOKES_KWARGS...)
-    @test config.forward_fourier_transform !== nothing
-    @test config.inverse_fourier_transform !== nothing
+    @test config.solver.forward_fourier_transform !== nothing
+    @test config.solver.inverse_fourier_transform !== nothing
 end
 
 @testset "Cold-path validation works for Float32 as well as Float64" begin
@@ -112,9 +112,9 @@ end
         viscosity = 1.5f0,
     )
     @test config.μ == 1.5f0
-    @test eltype(config.fluid_velocity) == SVector{3, Float32}
-    @test eltype(config.fluid_hat) == SVector{3, ComplexF32}
-    @test eltype(config.k_x) == Float32
+    @test eltype(config.grid.fluid_velocity) == SVector{3, Float32}
+    @test eltype(config.solver.fluid_hat) == SVector{3, ComplexF32}
+    @test eltype(config.solver.k_x) == Float32
 end
 
 @testset "Mean velocity is exactly zero (k = 0 gauge fix)" begin
@@ -131,7 +131,7 @@ end
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8, viscosity = T(1),
         )
-        fx, fy, fz = components(config.force_density)
+        fx, fy, fz = components(config.grid.force_density)
         # Deterministic non-mean-zero force field.
         for iz in axes(fx, 3), iy in axes(fx, 2), ix in axes(fx, 1)
             fx[ix, iy, iz] = T(ix) + T(iy) * T(0.3) - T(iz) * T(0.5) + T(1)
@@ -139,7 +139,7 @@ end
             fz[ix, iy, iz] = cos(T(ix) * T(iz)) * T(0.5) + T(0.3)
         end
         stokes_solve!(config)
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         atol = sqrt(eps(T))
         @test abs(sum(ux)) ≤ atol
         @test abs(sum(uy)) ≤ atol
@@ -165,7 +165,7 @@ end
             num_grid_points = (Int32(8), Int32(8), Int32(8)),
             M_G = 8, viscosity = T(1),
         )
-        fx, fy, fz = components(config.force_density)
+        fx, fy, fz = components(config.grid.force_density)
         for iz in axes(fx, 3), iy in axes(fx, 2), ix in axes(fx, 1)
             fx[ix, iy, iz] = sin(T(ix) * T(0.7)) * T(0.5)
             fy[ix, iy, iz] = cos(T(iy) + T(iz) * T(0.4))
@@ -173,22 +173,22 @@ end
         end
 
         # Forward FFT + projection only; skip the destructive backward FFT.
-        fx̂, fŷ, fẑ = components(config.fluid_hat)
-        mul!(fx̂, config.forward_fourier_transform, fx)
-        mul!(fŷ, config.forward_fourier_transform, fy)
-        mul!(fẑ, config.forward_fourier_transform, fz)
+        fx̂, fŷ, fẑ = components(config.solver.fluid_hat)
+        mul!(fx̂, config.solver.forward_fourier_transform, fx)
+        mul!(fŷ, config.solver.forward_fourier_transform, fy)
+        mul!(fẑ, config.solver.forward_fourier_transform, fz)
         M = Int(config.num_grid_points[1]) * Int(config.num_grid_points[2]) *
                   Int(config.num_grid_points[3])
         inv_M = one(T) / T(M)
         _apply_inverse_stokes_kernel!(
             fx̂, fŷ, fẑ,
-            config.k_x, config.k_y, config.k_z,
+            config.solver.k_x, config.solver.k_y, config.solver.k_z,
             config.μ, inv_M,
         )
 
         rtol = sqrt(eps(T))
         divergence_free_at = function (ix, iy, iz)
-            kx, ky, kz = config.k_x[ix], config.k_y[iy], config.k_z[iz]
+            kx, ky, kz = config.solver.k_x[ix], config.solver.k_y[iy], config.solver.k_z[iz]
             ûx_v = fx̂[ix, iy, iz]
             ûy_v = fŷ[ix, iy, iz]
             ûz_v = fẑ[ix, iy, iz]
@@ -198,9 +198,9 @@ end
         end
         @test all(
             divergence_free_at(ix, iy, iz)
-            for iz in eachindex(config.k_z),
-                iy in eachindex(config.k_y),
-                ix in eachindex(config.k_x)
+            for iz in eachindex(config.solver.k_z),
+                iy in eachindex(config.solver.k_y),
+                ix in eachindex(config.solver.k_x)
         )
     end
 end
@@ -224,7 +224,7 @@ end
         )
         m = 1
         kx_mode = T(2) * T(π) * T(m) / L[1]
-        fx, fy, fz = components(config.force_density)
+        fx, fy, fz = components(config.grid.force_density)
         for iz in 1:M_z, iy in 1:M_y, ix in 1:M_x
             x = T(ix - 1) * config.h
             fx[ix, iy, iz] = zero(T)
@@ -232,7 +232,7 @@ end
             fz[ix, iy, iz] = zero(T)
         end
         stokes_solve!(config)
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
 
         scale = one(T) / (config.μ * kx_mode * kx_mode)
         atol = sqrt(eps(T)) * scale
@@ -260,10 +260,10 @@ end
         α, β = T(1.7), -T(2.3)
 
         function solve_with(set_force!)
-            fx, fy, fz = components(config.force_density)
+            fx, fy, fz = components(config.grid.force_density)
             set_force!(fx, fy, fz)
             stokes_solve!(config)
-            ux, uy, uz = components(config.fluid_velocity)
+            ux, uy, uz = components(config.grid.fluid_velocity)
             return (copy(ux), copy(uy), copy(uz))
         end
 
@@ -318,12 +318,12 @@ end
         )
 
         function solve_with_force(base_force)
-            fx, fy, fz = components(config.force_density)
+            fx, fy, fz = components(config.grid.force_density)
             copyto!(fx, base_force[1])
             copyto!(fy, base_force[2])
             copyto!(fz, base_force[3])
             stokes_solve!(config)
-            ux, uy, uz = components(config.fluid_velocity)
+            ux, uy, uz = components(config.grid.fluid_velocity)
             return (copy(ux), copy(uy), copy(uz))
         end
 
@@ -377,12 +377,12 @@ end
                     for ix in 1:Mx, iy in 1:My, iz in 1:Mz]
 
         function solve(fx_, fy_, fz_)
-            fx, fy, fz = components(config.force_density)
+            fx, fy, fz = components(config.grid.force_density)
             copyto!(fx, fx_)
             copyto!(fy, fy_)
             copyto!(fz, fz_)
             stokes_solve!(config)
-            ux, uy, uz = components(config.fluid_velocity)
+            ux, uy, uz = components(config.grid.fluid_velocity)
             return (copy(ux), copy(uy), copy(uz))
         end
 
@@ -429,7 +429,7 @@ end
         force_y = T[sin(T(ix) * T(0.3) + T(iy) * T(0.2) + T(iz) * T(0.1))
                     for ix in 1:8, iy in 1:8, iz in 1:8]
         for cfg in (config_low, config_high)
-            fx, fy, fz = components(cfg.force_density)
+            fx, fy, fz = components(cfg.grid.force_density)
             fill!(fx, zero(T))
             copyto!(fy, force_y)
             fill!(fz, zero(T))
@@ -438,8 +438,8 @@ end
         stokes_solve!(config_high)
 
         rtol = sqrt(eps(T))
-        u_low = components(config_low.fluid_velocity)
-        u_high = components(config_high.fluid_velocity)
+        u_low = components(config_low.grid.fluid_velocity)
+        u_high = components(config_high.grid.fluid_velocity)
         for comp in 1:3
             @test all(
                 isapprox.(
@@ -485,7 +485,7 @@ end
     spread_forces!(config)
     stokes_solve!(config)
 
-    ux, uy, uz = components(config.fluid_velocity)
+    ux, uy, uz = components(config.grid.fluid_velocity)
     h = config.h
     centre_idx = (Int(M) ÷ 2 + 1, Int(M) ÷ 2 + 1, Int(M) ÷ 2 + 1)
 
@@ -529,7 +529,7 @@ end
         )
         # `force_density` is zero-initialised at construction.
         stokes_solve!(config)
-        ux, uy, uz = components(config.fluid_velocity)
+        ux, uy, uz = components(config.grid.fluid_velocity)
         @test all(iszero, ux)
         @test all(iszero, uy)
         @test all(iszero, uz)

@@ -3,43 +3,43 @@
 
 Step 4 of the Fast FCM algorithm (Su & Keaveny 2024, §4; the Fourier-space Stokes inversion
 of §3, equations (32)-(33)). Apply the inverse Stokes operator `L^{-1}` to the spread force
-field in `config.force_density` and write the resulting fluid velocity field to
-`config.fluid_velocity`: a forward FFT of each `force_density` component into `fluid_hat`,
+field in `config.grid.force_density` and write the resulting fluid velocity field to
+`config.grid.fluid_velocity`: a forward FFT of each `force_density` component into `fluid_hat`,
 the per-mode projection `(I - k̂⊗k̂)/(μ k²) / M` in place on `fluid_hat` with the `k = 0`
 mode zeroed (the mean-flow gauge fix), and an inverse FFT into `fluid_velocity`. The `1/M`
 factor compensates the unnormalised FFTW round-trip.
 
 # Arguments
 - `config::FFCMConfig{T}`: the compiled configuration. Reads
-  `config.force_density` (populated by `spread_forces!`); writes
-  `config.fluid_velocity` and overwrites `config.fluid_hat`.
+  `config.grid.force_density` (populated by `spread_forces!`); writes
+  `config.grid.fluid_velocity` and overwrites `config.solver.fluid_hat`.
 
 # Returns
-- `config`: the same configuration, with `config.fluid_velocity` holding the Stokes velocity
+- `config`: the same configuration, with `config.grid.fluid_velocity` holding the Stokes velocity
   field.
 
 See `spec/stokes-solve.md`.
 """
 function stokes_solve!(config::FFCMConfig{T}) where {T}
-    fx, fy, fz = components(config.force_density)
-    fx̂, fŷ, fẑ = components(config.fluid_hat)
-    mul!(fx̂, config.forward_fourier_transform, fx)
-    mul!(fŷ, config.forward_fourier_transform, fy)
-    mul!(fẑ, config.forward_fourier_transform, fz)
+    fx, fy, fz = components(config.grid.force_density)
+    fx̂, fŷ, fẑ = components(config.solver.fluid_hat)
+    mul!(fx̂, config.solver.forward_fourier_transform, fx)
+    mul!(fŷ, config.solver.forward_fourier_transform, fy)
+    mul!(fẑ, config.solver.forward_fourier_transform, fz)
 
     M_x, M_y, M_z = config.num_grid_points
     M = Int(M_x) * Int(M_y) * Int(M_z)
     inv_M = one(T) / T(M)
     _apply_inverse_stokes_kernel!(
         fx̂, fŷ, fẑ,
-        config.k_x, config.k_y, config.k_z,
+        config.solver.k_x, config.solver.k_y, config.solver.k_z,
         config.μ, inv_M,
     )
 
-    ux, uy, uz = components(config.fluid_velocity)
-    mul!(ux, config.inverse_fourier_transform, fx̂)
-    mul!(uy, config.inverse_fourier_transform, fŷ)
-    mul!(uz, config.inverse_fourier_transform, fẑ)
+    ux, uy, uz = components(config.grid.fluid_velocity)
+    mul!(ux, config.solver.inverse_fourier_transform, fx̂)
+    mul!(uy, config.solver.inverse_fourier_transform, fŷ)
+    mul!(uz, config.solver.inverse_fourier_transform, fẑ)
     return config
 end
 

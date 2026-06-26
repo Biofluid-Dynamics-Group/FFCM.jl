@@ -2,7 +2,7 @@
     interpolate_velocities!(V, config) -> V
 
 Step 5 of the Fast FCM algorithm (Su & Keaveny 2024, §4; the interpolation operator of §3
-equation (26)). Interpolate the fluid velocity field `config.fluid_velocity` (output of
+equation (26)). Interpolate the fluid velocity field `config.grid.fluid_velocity` (output of
 `stokes_solve!`) to each particle position, evaluating the modified-kernel volume average
 `Ṽ_n = ∫ u(x) Δ̃_n(x; Σ) dx` by the trapezoidal rule over the same `M_G³` stencil as the
 spread, with weight `h³`.
@@ -14,8 +14,8 @@ operator symmetric positive-definite.
 # Arguments
 - `V::AbstractMatrix{T}`: a caller-owned `3xN` matrix, overwritten with the particle
   velocities in the caller's **original** particle order.
-- `config::FFCMConfig{T}`: the compiled configuration. Reads `config.fluid_velocity`,
-  `config.Y_sorted`, and `config.original_index`(populated by `sort_particles_by_cell!`).
+- `config::FFCMConfig{T}`: the compiled configuration. Reads `config.grid.fluid_velocity`,
+  `config.particles.Y_sorted`, and `config.cells.original_index`(populated by `sort_particles_by_cell!`).
 
 # Returns
 - `V`: the same matrix, holding the interpolated particle velocities.
@@ -27,18 +27,18 @@ function interpolate_velocities!(
 ) where {T}
     _interpolate_velocities_kernel!(
         V,
-        config.fluid_velocity,
-        config.Y_sorted,
-        config.original_index,
+        config.grid.fluid_velocity,
+        config.particles.Y_sorted,
+        config.cells.original_index,
         config.σ,
         config.Σ,
         config.h,
         config.inv_h,
         config.num_grid_points,
         config.M_G,
-        config.stencil_gaussian,
-        config.stencil_r²,
-        config.stencil_index,
+        config.stencil.stencil_gaussian,
+        config.stencil.stencil_r²,
+        config.stencil.stencil_index,
     )
     return V
 end

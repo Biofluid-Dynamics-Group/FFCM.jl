@@ -101,21 +101,21 @@ end
         sort_particles_by_cell!(config, Y, F)
         # Sorted hashes are non-decreasing, and each cell's range holds
         # exactly the particles whose hash equals that cell.
-        @test issorted(config.cell_hash[config.original_index])
-        total = length(config.cell_start)
+        @test issorted(config.cells.cell_hash[config.cells.original_index])
+        total = length(config.cells.cell_start)
         covered = 0
         membership_consistent = true
         for c in 0:(total - 1)
-            for s in config.cell_start[c + 1]:config.cell_end[c + 1]
+            for s in config.cells.cell_start[c + 1]:config.cells.cell_end[c + 1]
                 membership_consistent &=
-                    config.cell_hash[config.original_index[s]] == c
+                    config.cells.cell_hash[config.cells.original_index[s]] == c
                 covered += 1
             end
         end
         @test membership_consistent
         @test covered == N
         # The gathered data matches the permutation.
-        @test config.Y_sorted == Y[:, config.original_index]
-        @test config.F_sorted == F[:, config.original_index]
+        @test config.particles.Y_sorted == Y[:, config.cells.original_index]
+        @test config.particles.F_sorted == F[:, config.cells.original_index]
     end
 end

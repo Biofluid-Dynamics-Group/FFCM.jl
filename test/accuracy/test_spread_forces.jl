@@ -18,12 +18,12 @@ using StructArrays: components
             num_grid_points = (M, M, M),
             M_G = 8,
         )
-        config.Y_sorted[1, 1] = T(2)
-        config.Y_sorted[2, 1] = T(2)
-        config.Y_sorted[3, 1] = T(2)
-        config.F_sorted[1, 1] = T(1)
-        config.F_sorted[2, 1] = T(0)
-        config.F_sorted[3, 1] = T(0)
+        config.particles.Y_sorted[1, 1] = T(2)
+        config.particles.Y_sorted[2, 1] = T(2)
+        config.particles.Y_sorted[3, 1] = T(2)
+        config.particles.F_sorted[1, 1] = T(1)
+        config.particles.F_sorted[2, 1] = T(0)
+        config.particles.F_sorted[3, 1] = T(0)
         spread_forces!(config)
 
         # Reference computed fresh from paper §3 equation (22) expanded as
@@ -45,7 +45,7 @@ using StructArrays: components
         # evaluations of the same closed form, so relative agreement holds even
         # at far-field grid points where the kernel is tiny.
         @test all(
-            isapprox(config.force_density[I], expected[I]; rtol = rtol)
+            isapprox(config.grid.force_density[I], expected[I]; rtol = rtol)
             for I in CartesianIndices(expected)
         )
     end
@@ -72,12 +72,12 @@ end
         h = config.h
 
         spread_at = function (Y_frac)
-            fill!(config.Y_sorted, T(Y_frac) * h)
-            config.F_sorted[1, 1] = T(1)
-            config.F_sorted[2, 1] = T(0)
-            config.F_sorted[3, 1] = T(0)
+            fill!(config.particles.Y_sorted, T(Y_frac) * h)
+            config.particles.F_sorted[1, 1] = T(1)
+            config.particles.F_sorted[2, 1] = T(0)
+            config.particles.F_sorted[3, 1] = T(0)
             spread_forces!(config)
-            fx = components(config.force_density)[1]
+            fx = components(config.grid.force_density)[1]
             marginal_x = vec(sum(abs.(fx); dims = (2, 3)))
             return sort(findall(>(zero(T)), marginal_x))
         end
@@ -123,19 +123,19 @@ end
             nx = ((n - 1) % 3) + 1
             ny = ((n - 1) ÷ 3) % 3 + 1
             nz = ((n - 1) ÷ 9) + 1
-            config.Y_sorted[1, n] = L[1] * (nx - T(0.5)) / 3
-            config.Y_sorted[2, n] = L[2] * (ny - T(0.5)) / 3
-            config.Y_sorted[3, n] = L[3] * (nz - T(0.5)) / 3
-            config.F_sorted[1, n] = sin(T(n))
-            config.F_sorted[2, n] = cos(T(n))
-            config.F_sorted[3, n] = T(n) / N - T(0.5)
+            config.particles.Y_sorted[1, n] = L[1] * (nx - T(0.5)) / 3
+            config.particles.Y_sorted[2, n] = L[2] * (ny - T(0.5)) / 3
+            config.particles.Y_sorted[3, n] = L[3] * (nz - T(0.5)) / 3
+            config.particles.F_sorted[1, n] = sin(T(n))
+            config.particles.F_sorted[2, n] = cos(T(n))
+            config.particles.F_sorted[3, n] = T(n) / N - T(0.5)
         end
         spread_forces!(config)
 
-        fx, fy, fz = components(config.force_density)
+        fx, fy, fz = components(config.grid.force_density)
         h³ = config.h^3
         total_grid = (sum(fx) * h³, sum(fy) * h³, sum(fz) * h³)
-        total_force = ntuple(i -> sum(@view config.F_sorted[i, :]), 3)
+        total_force = ntuple(i -> sum(@view config.particles.F_sorted[i, :]), 3)
 
         # Tolerance follows the paper-tabulated error for the chosen
         # (M_G, Σ/h). At Σ/h ≈ 1.13 with M_G = 16 the stencil radius is
@@ -164,15 +164,15 @@ end
         )
         Y_n = (T(8.3), T(7.7), T(8.1))   # off-grid, near the box centre
                                           # so the M_G stencil never wraps
-        config.Y_sorted[1, 1] = Y_n[1]
-        config.Y_sorted[2, 1] = Y_n[2]
-        config.Y_sorted[3, 1] = Y_n[3]
-        config.F_sorted[1, 1] = T(1)
-        config.F_sorted[2, 1] = T(0)
-        config.F_sorted[3, 1] = T(0)
+        config.particles.Y_sorted[1, 1] = Y_n[1]
+        config.particles.Y_sorted[2, 1] = Y_n[2]
+        config.particles.Y_sorted[3, 1] = Y_n[3]
+        config.particles.F_sorted[1, 1] = T(1)
+        config.particles.F_sorted[2, 1] = T(0)
+        config.particles.F_sorted[3, 1] = T(0)
         spread_forces!(config)
 
-        fx, _, _ = components(config.force_density)
+        fx, _, _ = components(config.grid.force_density)
         h = config.h
         h³ = h^3
         centroid = (zero(T), zero(T), zero(T))
@@ -207,14 +207,14 @@ end
             M_G = 8,
         )
         spread_at = function (Y)
-            config.Y_sorted[1, 1] = Y[1]
-            config.Y_sorted[2, 1] = Y[2]
-            config.Y_sorted[3, 1] = Y[3]
-            config.F_sorted[1, 1] = T(1)
-            config.F_sorted[2, 1] = T(2)
-            config.F_sorted[3, 1] = -T(3)
+            config.particles.Y_sorted[1, 1] = Y[1]
+            config.particles.Y_sorted[2, 1] = Y[2]
+            config.particles.Y_sorted[3, 1] = Y[3]
+            config.particles.F_sorted[1, 1] = T(1)
+            config.particles.F_sorted[2, 1] = T(2)
+            config.particles.F_sorted[3, 1] = -T(3)
             spread_forces!(config)
-            fx, fy, fz = components(config.force_density)
+            fx, fy, fz = components(config.grid.force_density)
             return (copy(fx), copy(fy), copy(fz))
         end
         h = config.h
@@ -246,17 +246,17 @@ end
             num_grid_points = (M, M, M),
             M_G = 8,
         )
-        config.Y_sorted[1, 1] = T(5); config.Y_sorted[2, 1] = T(6); config.Y_sorted[3, 1] = T(7)
-        config.Y_sorted[1, 2] = T(9); config.Y_sorted[2, 2] = T(10); config.Y_sorted[3, 2] = T(11)
+        config.particles.Y_sorted[1, 1] = T(5); config.particles.Y_sorted[2, 1] = T(6); config.particles.Y_sorted[3, 1] = T(7)
+        config.particles.Y_sorted[1, 2] = T(9); config.particles.Y_sorted[2, 2] = T(10); config.particles.Y_sorted[3, 2] = T(11)
         α, β = T(1.7), -T(2.3)
         F1 = (T(1), T(0), T(0))
         F2 = (T(0), T(1), T(2))
 
         function spread_with(F1, F2)
-            config.F_sorted[1, 1] = F1[1]; config.F_sorted[2, 1] = F1[2]; config.F_sorted[3, 1] = F1[3]
-            config.F_sorted[1, 2] = F2[1]; config.F_sorted[2, 2] = F2[2]; config.F_sorted[3, 2] = F2[3]
+            config.particles.F_sorted[1, 1] = F1[1]; config.particles.F_sorted[2, 1] = F1[2]; config.particles.F_sorted[3, 1] = F1[3]
+            config.particles.F_sorted[1, 2] = F2[1]; config.particles.F_sorted[2, 2] = F2[2]; config.particles.F_sorted[3, 2] = F2[3]
             spread_forces!(config)
-            fx, fy, fz = components(config.force_density)
+            fx, fy, fz = components(config.grid.force_density)
             return (copy(fx), copy(fy), copy(fz))
         end
 
@@ -294,15 +294,15 @@ end
         # `Y = 4⋅h` is the grid point at 1-based index 5 in each axis.
         anchor = Int32(4)
         Y_val = T(anchor) * h
-        config.Y_sorted[1, 1] = Y_val
-        config.Y_sorted[2, 1] = Y_val
-        config.Y_sorted[3, 1] = Y_val
-        config.F_sorted[1, 1] = T(1)
-        config.F_sorted[2, 1] = T(0)
-        config.F_sorted[3, 1] = T(0)
+        config.particles.Y_sorted[1, 1] = Y_val
+        config.particles.Y_sorted[2, 1] = Y_val
+        config.particles.Y_sorted[3, 1] = Y_val
+        config.particles.F_sorted[1, 1] = T(1)
+        config.particles.F_sorted[2, 1] = T(0)
+        config.particles.F_sorted[3, 1] = T(0)
         spread_forces!(config)
 
-        fx = components(config.force_density)[1]
+        fx = components(config.grid.force_density)[1]
         rtol = sqrt(eps(T))
         # Reflect over the anchor (1-based index `anchor + 1`) on axis x.
         for δ in 1:((M_G - 1) ÷ 2)
@@ -337,17 +337,17 @@ end
             M_G = 16,
         )
         Y_n = (T(4), T(4), T(4))   # box centre — no periodic wrap of the stencil
-        config.Y_sorted[1, 1] = Y_n[1]
-        config.Y_sorted[2, 1] = Y_n[2]
-        config.Y_sorted[3, 1] = Y_n[3]
-        config.F_sorted[1, 1] = T(1)
-        config.F_sorted[2, 1] = T(0)
-        config.F_sorted[3, 1] = T(0)
+        config.particles.Y_sorted[1, 1] = Y_n[1]
+        config.particles.Y_sorted[2, 1] = Y_n[2]
+        config.particles.Y_sorted[3, 1] = Y_n[3]
+        config.particles.F_sorted[1, 1] = T(1)
+        config.particles.F_sorted[2, 1] = T(0)
+        config.particles.F_sorted[3, 1] = T(0)
         spread_forces!(config)
 
         σ = config.σ
         h = config.h
-        fx = components(config.force_density)[1]
+        fx = components(config.grid.force_density)[1]
         rtol = sqrt(eps(T))
         expected = Array{T}(undef, Int(M), Int(M), Int(M))
         for iz in 1:M, iy in 1:M, ix in 1:M
