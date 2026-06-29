@@ -248,3 +248,56 @@ function _assign_cells_kernel!(
     end
     return cell_hash
 end
+
+"""
+    _build_neighbor_map(num_cells) -> Vector{Int32}
+
+Build the half-shell neighbour map for the GPU pairwise correction (paper §4): for each cell
+`c ∈ 0:total-1`, the 0-based linear indices of its 13 forward neighbour cells, laid out
+contiguously so cell `c` owns slots `13c+1 : 13c+13`. The 13 offsets are one half of the 26
+surrounding cells, chosen so each unordered neighbouring pair of cells is listed once — the
+GPU correction adds each pairwise term to both particles, so only half the shell is walked.
+
+Geometry-only and built once on the host; the CUDA extension copies the result to the device.
+
+# Arguments
+- `num_cells::NTuple{3, Int32}`: the cell-grid dimensions `(m_x, m_y, m_z)`, each `≥ 3`, so
+  the periodic wrap maps the 13 offsets to cells distinct from `c`.
+
+# Returns
+- `Vector{Int32}` of length `13 * prod(num_cells)`: the per-cell neighbour cell indices.
+
+See `spec/particle-sorting.md`, `spec/cuda-conventions.md`.
+"""
+function _build_neighbor_map(num_cells::NTuple{3, Int32})
+    m_x, m_y, m_z = num_cells
+    offsets = (
+        (Int32(1), Int32(0), Int32(0)),
+        (Int32(1), Int32(1), Int32(0)),
+        (Int32(0), Int32(1), Int32(0)),
+        (Int32(-1), Int32(1), Int32(0)),
+        (Int32(1), Int32(0), Int32(-1)),
+        (Int32(1), Int32(1), Int32(-1)),
+        (Int32(0), Int32(1), Int32(-1)),
+        (Int32(-1), Int32(1), Int32(-1)),
+        (Int32(1), Int32(0), Int32(1)),
+        (Int32(1), Int32(1), Int32(1)),
+        (Int32(0), Int32(1), Int32(1)),
+        (Int32(-1), Int32(1), Int32(1)),
+        (Int32(0), Int32(0), Int32(1)),
+    )
+    total = Int(m_x) * Int(m_y) * Int(m_z)
+    neighbor_map = Vector{Int32}(undef, 13 * total)
+    for cz in Int32(0):(m_z - Int32(1)), cy in Int32(0):(m_y - Int32(1)),
+        cx in Int32(0):(m_x - Int32(1))
+
+        base = 13 * Int(cx + (cy + cz * m_y) * m_x)
+        for (k, (dx, dy, dz)) in enumerate(offsets)
+            nx = mod(cx + dx, m_x)
+            ny = mod(cy + dy, m_y)
+            nz = mod(cz + dz, m_z)
+            neighbor_map[base + k] = nx + (ny + nz * m_y) * m_x
+        end
+    end
+    return neighbor_map
+end

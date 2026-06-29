@@ -1,10 +1,14 @@
 """
 Cell-list bookkeeping for the pairwise correction (paper §4): the per-particle
-cell hash, the sort permutation, and the per-cell occupancy ranges with the
-counting-sort workspace. All five buffers are integer-indexed.
+cell hash, the sort permutation, the per-cell occupancy ranges with the
+counting-sort workspace, and the GPU neighbour map. The first five buffers are
+integer-indexed.
 
 The storage type `IntVector` is `Vector{Int32}` on the CPU backend and the
 device vector type on the GPU backend, so the backend is a type-parameter swap.
+`NeighborMap` is the single backend-divergent field: `Nothing` on the CPU (whose
+correction computes neighbours on the fly) and the device half-shell map on the
+GPU (`spec/cuda-conventions.md`).
 
 # Fields
 - `cell_hash::IntVector`: per-particle 0-based linear cell index (length `N`).
@@ -13,15 +17,19 @@ device vector type on the GPU backend, so the backend is a type-parameter swap.
   range of each cell (length `prod(num_cells)`).
 - `counting_sort_scratch::IntVector`: per-cell counting-sort workspace
   (length `prod(num_cells)`).
+- `neighbor_map::NeighborMap`: `nothing` on the CPU; on the GPU the device vector
+  of 13 forward half-shell neighbour cells per cell (length `13 * prod(num_cells)`),
+  built by `_build_neighbor_map` and consumed by the pairwise correction.
 
 See `spec/spatial-hashing.md`, `spec/particle-sorting.md`.
 """
-struct CellBuffers{IntVector}
+struct CellBuffers{IntVector, NeighborMap}
     cell_hash::IntVector
     original_index::IntVector
     cell_start::IntVector
     cell_end::IntVector
     counting_sort_scratch::IntVector
+    neighbor_map::NeighborMap
 end
 
 """
@@ -389,6 +397,7 @@ function _assemble_cpu_buffers(
         Vector{Int32}(undef, num_cells_total),
         Vector{Int32}(undef, num_cells_total),
         Vector{Int32}(undef, num_cells_total),
+        nothing,
     )
     particles = ParticleBuffers(
         Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N),
@@ -492,9 +501,12 @@ function FFCMConfig{T}(;
     end
 
     cells, particles, grid, solver, stencil = if gpu_acceleration
+        # The neighbour map is geometry-only; build it once on the host and let the
+        # extension copy it to the device (spec/cuda-conventions.md).
         _assemble_gpu_buffers(
             T, N, num_grid_points, M_G_i32, num_cells_total,
-            derived.k_x, derived.k_y, derived.k_z, fft_planning, fft_threads,
+            derived.k_x, derived.k_y, derived.k_z,
+            _build_neighbor_map(derived.num_cells),
         )
     else
         _assemble_cpu_buffers(
