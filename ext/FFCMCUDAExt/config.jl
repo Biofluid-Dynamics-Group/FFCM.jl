@@ -1,28 +1,14 @@
-module FFCMCUDAExt
-
-# CUDA backend of the Fast FCM mobility operator (Su & Keaveny 2024, §3 and §4).
-# Loaded automatically when a user runs `using CUDA` alongside `using FFCM`,
-# through the package's `[weakdeps]`/`[extensions]` tables. This is the only place
-# CUDA appears; `src` stays free of it (CLAUDE.md §7). See spec/cuda-conventions.md.
-
-using FFCM
-using CUDA
-using StaticArrays: SVector
-using StructArrays: StructArray
-
-import FFCM: _assemble_gpu_buffers
-
 """
     _assemble_gpu_buffers(T, N, num_grid_points, M_G, num_cells_total, k_x, k_y, k_z,
-        fft_planning, fft_threads) -> (cells, particles, grid, solver, stencil)
+        neighbor_map_host) -> (cells, particles, grid, solver, stencil)
 
 Allocates the GPU-backed sub-struct buffers and the cuFFT plans, the device counterpart of
 `FFCM._assemble_cpu_buffers`. Adding this method to the `_assemble_gpu_buffers` function
 declared in `FFCM` is what makes `FFCMConfig(; …, gpu_acceleration = true)` build a
 GPU-backed configuration; without this extension loaded, only the throwing fallback exists.
 
-`fft_planning` and `fft_threads` are CPU-only (they configure the FFTW planner) and are
-ignored here.
+The host-built `neighbor_map_host` (the half-shell neighbour map, geometry-only) is copied to
+the device and stored on `cells`; the CPU backend stores `nothing` there instead.
 
 # Returns
 - `Tuple` of `FFCM.CellBuffers`, `FFCM.ParticleBuffers`, `FFCM.GridBuffers`,
@@ -39,8 +25,7 @@ function _assemble_gpu_buffers(
     k_x::Vector{T},
     k_y::Vector{T},
     k_z::Vector{T},
-    fft_planning::Symbol,
-    fft_threads::Integer,
+    neighbor_map_host::Vector{Int32},
 ) where {T}
     cells = FFCM.CellBuffers(
         CuVector{Int32}(undef, N),
@@ -48,6 +33,7 @@ function _assemble_gpu_buffers(
         CuVector{Int32}(undef, num_cells_total),
         CuVector{Int32}(undef, num_cells_total),
         CuVector{Int32}(undef, num_cells_total),
+        CuArray(neighbor_map_host),
     )
     particles = FFCM.ParticleBuffers(
         CuMatrix{T}(undef, 3, N),
@@ -109,5 +95,3 @@ function _assemble_gpu_buffers(
     # a kernel.
     return (cells, particles, grid, solver, stencil)
 end
-
-end # module FFCMCUDAExt
