@@ -91,6 +91,17 @@ fully specialised:
 The five cell-list buffers and the two sorted matrices are allocated once by the
 `FFCMConfig` constructor.
 
+On the GPU backend the same two function-barrier kernels gain device methods,
+dispatched on the device buffer types, so `sort_particles_by_cell!` is identical
+source for both backends. `_build_cell_list_kernel!` becomes the **parallel**
+counting sort — an atomic-increment histogram, an `accumulate!` prefix sum to the
+per-cell ranges, then an atomic-cursor scatter — over the same buffers the CPU
+uses (no device-only field). The atomic scatter is not stable, so the intra-cell
+order of `original_index` (and the column order of `Y_sorted`/`F_sorted`) is
+unspecified; the per-cell `cell_start`/`cell_end` ranges, which depend only on the
+counts, are identical to the CPU's. `_gather_particles_kernel!` is a grid-stride
+gather. See [cuda-conventions.md](cuda-conventions.md).
+
 | Phase | Allocations | Functions |
 |---|---|---|
 | Cold | OK | `FFCMConfig` constructor allocates `original_index`, `cell_start`, `cell_end`, `counting_sort_scratch`, `Y_sorted`, `F_sorted`. |
@@ -154,9 +165,10 @@ The cuFCM reference (`cuFCM/src/CUFCM_CELLLIST.cu`: `sort_index_by_key`,
 | Empty cells | left undefined (relies on dense packing) | well-defined empty range `cell_end = cell_start − 1` |
 | Permutation direction | `index`: sorted → original | `original_index`: same |
 | Temp storage | `key_buf`, `index_buf`, temp storage malloc'd per call | pre-allocated `counting_sort_scratch` on `config`; allocation-free |
-| Stability | radix sort is stable | scatter in ascending $n$ is stable |
+| Stability | radix sort is stable | CPU scatter in ascending $n$ is stable; the GPU atomic scatter is not (intra-cell order unspecified, immaterial to the velocities) |
 | Data reorder | gathers position/force (and more) via `index` | gathers `Y`/`F` into `Y_sorted`/`F_sorted` |
-| Neighbour-cell map | `bulkmap_loop` precomputes neighbour indices | out of scope here — that is step 6 (pairwise correction) |
+| Neighbour-cell map | `bulkmap_loop` precomputes neighbour indices | built once on the host by `_build_neighbor_map` and stored on the device for the GPU correction (a `nothing` field on the CPU, which computes neighbours on the fly); consumed by step 6 |
+| Device sort | `cub::DeviceRadixSort` (O(N), stable) | counting sort ported to the device (O(N + cells), non-stable atomic scatter); radix is a benchmark-gated follow-up — see [cuda-conventions.md](cuda-conventions.md) |
 
 The one behavioural difference worth flagging is empty-cell handling: cuFCM's
 boundary scan writes `cell_start`/`cell_end` only for occupied cells, leaving empty cells

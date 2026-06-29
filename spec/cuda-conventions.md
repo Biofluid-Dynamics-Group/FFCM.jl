@@ -50,7 +50,7 @@ into five storage-type-parameterized sub-structs:
 
 | Sub-struct | Holds | Backend-specific growth |
 |---|---|---|
-| `cells` | cell-list integer bookkeeping (hash, sort permutation, per-cell ranges, sort workspace) | the GPU neighbour map |
+| `cells` | cell-list integer bookkeeping (hash, sort permutation, per-cell ranges, counting-sort workspace) | the neighbour map — a second type parameter, `nothing` on the CPU and the device half-shell map on the GPU |
 | `particles` | the $3 \times N$ wrapped/sorted position and force buffers | — |
 | `grid` | the real-space force-density and fluid-velocity fields | — |
 | `solver` | the Fourier-space field, the wavevectors, and the FFT plans | cuFFT plans replace FFTW plans |
@@ -67,6 +67,43 @@ backend-independent scalars and lookup tables, then assemble the backend buffers
 and plans. Only the third phase is backend-specific. The CPU assembly lives in
 `src`; the GPU assembly is supplied by the package extension. The constructor
 routes to one or the other on the `gpu_acceleration` flag.
+
+### Step 1 kernels: hashing, counting sort, neighbour map
+
+The first pipeline step (spatial hashing and the cell list,
+[spatial-hashing.md](spatial-hashing.md), [particle-sorting.md](particle-sorting.md))
+is ported to the device by adding GPU methods, dispatched on the device buffer
+types, to the same step functions the CPU backend uses (`wrap_positions!`,
+`_assign_cells_kernel!`, `_build_cell_list_kernel!`, `_gather_particles_kernel!`).
+The public wrappers (`assign_cells!`, `sort_particles_by_cell!`) and `mobility!`
+stay backend-agnostic; the backend split is a single dispatch seam on the buffer
+storage type.
+
+- **Wrap and hash** are grid-stride kernels, one thread per particle: fold each
+  position into $[0, L_i)$, then compute the same floor / clamp / linearisation as
+  the CPU hash. The per-axis $\min(\cdot, m_i - 1)$ clamp is kept.
+- **Cell list** is a GPU **counting sort** — the same algorithm as the CPU
+  ([particle-sorting.md](particle-sorting.md)), parallelised: an atomic-increment
+  histogram into the counting-sort workspace, an exclusive prefix sum to the
+  per-cell ranges, and an atomic-cursor scatter of the permutation. The per-cell
+  ranges depend only on the per-cell counts, so `cell_start`/`cell_end` are
+  identical to the CPU's; the scatter is **not** stable (atomic ordering), so the
+  intra-cell order of `original_index` — and hence the column order of the gathered
+  `Y_sorted`/`F_sorted` — is unspecified and may vary run to run. This is
+  numerically immaterial (the downstream sums over a cell are order-independent to
+  round-off) and matches the deterministic-reduction caveat the package already
+  carries. Counting sort needs exactly the buffers the CPU backend already owns, so
+  it adds no device-only cell-list field.
+- **Neighbour map** (the half-shell of 13 forward neighbours per cell, consumed by
+  the pairwise correction) is geometry-only, so it is built once on the host by the
+  cold-path helper `_build_neighbor_map` and copied to the device. It is the single
+  backend-divergent `cells` field: a second type parameter, `nothing` on the CPU
+  (the CPU correction computes neighbours on the fly) and a device vector on the GPU.
+
+The prefix sum uses CUDA.jl's `accumulate!`, which is allocation-free for a
+single-block scan but allocates a transient aggregate buffer for the multi-block
+scan of a large cell count; an allocation-free scan for large grids is a deferred
+follow-up (recorded below).
 
 ## Contract
 
@@ -169,3 +206,17 @@ Unlike the CPU backend, which differs architecturally from cuFCM (loops, not
 block-per-particle kernels), the GPU backend tracks the reference closely; the
 two FFCM.jl backends are reconciled numerically by the parity tests, not
 structurally.
+
+**Step 1 — sort algorithm.** cuFCM sorts particles by cell key with
+`cub::DeviceRadixSort` (O(N), stable). CUDA.jl exposes no radix sort, and its
+stdlib `sortperm!` is a bitonic network (O(N log²N), ≈ 100× the radix work at
+N = 10⁶). This package instead ports the CPU **counting sort** to the device
+(O(N + cells)): same algorithmic result (particles grouped by cell, ranges from a
+prefix sum), O(N), and no device-only buffers. The trade is a non-stable atomic
+scatter, which makes the intra-cell order nondeterministic (immaterial to the
+velocities, per the deterministic-reduction caveat). A stable, deterministic
+O(N) device **radix** sort — matching cuFCM exactly — is a benchmark-gated
+follow-up, worth revisiting if reproducibility is required or atomic contention
+bottlenecks at extreme cell occupancy. cuFCM also precomputes the neighbour map
+(`bulkmap`); computing the half-shell on the fly in the GPU correction would drop
+the only backend-divergent field — also a benchmark-gated follow-up.

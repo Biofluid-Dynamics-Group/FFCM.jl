@@ -148,6 +148,13 @@ rather than handled here.
 The cell geometry (`num_cells`, `cell_size`, `inv_cell_size`) and the `cell_hash` buffer
 are built once by the `FFCMConfig` constructor.
 
+On the GPU backend, `wrap_positions!` and `_assign_cells_kernel!` gain device
+methods (dispatched on the device buffer types) that run the same fold, floor,
+clamp, and linearisation as grid-stride kernels, one thread per particle. The
+hash is integer arithmetic and `inv_cell_size` is the same host scalar passed to
+both backends, so the wrapped-in-domain hash is bit-identical to the CPU's; the
+per-axis clamp is kept. See [cuda-conventions.md](cuda-conventions.md).
+
 | Phase | Allocations | Functions |
 |---|---|---|
 | Cold | OK | `FFCMConfig` constructor: derive `num_cells`, `cell_size`, `inv_cell_size`; allocate `cell_hash`. |
