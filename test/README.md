@@ -1,7 +1,7 @@
 # Test suite guide
 
-Tests are grouped into three subdirectories, included by `runtests.jl` in
-pipeline order (accuracy and API files interleave step by step):
+Tests are grouped into subdirectories, included by `runtests.jl` in pipeline
+order (accuracy and API files interleave step by step):
 
 - **`accuracy/`** (`test_<step>.jl`) pins physical and mathematical
   behavior against an oracle that is independent of the implementation.
@@ -14,6 +14,9 @@ pipeline order (accuracy and API files interleave step by step):
   not exercised here.
 - **`hygiene/`** (`test_aqua.jl`, `test_jet.jl`, `test_exported_surface.jl`,
   `test_ascii_public_surface.jl`) audits the package as a whole.
+- **`cuda/`** (`test_gpu_*.jl`) pins the CUDA backend: backend-selection
+  errors (no device needed) and CPU↔CUDA parity (one device required). See
+  *Running the GPU tests* below for how these are guarded.
 
 Shared fixtures live in `test_utilities.jl`, directly under `test/`
 (standard config builder, clustered particle cloud, near-zero tolerance),
@@ -26,6 +29,27 @@ non-zero reference. Quantities that should be `≈ 0` use the **absolute**
 floor `_near_zero_atol(T)` (`1e-10` for `Float64`, `1e-6` for `Float32`).
 Truncation-dominated tests (grid-resolution limited, not round-off limited)
 document their own physical tolerance inline.
+
+## Running the GPU tests
+
+The `cuda/` parity tests run only when **exactly one CUDA device is visible**.
+On a single-GPU machine that is automatic — `Pkg.test()` finds the card and runs
+them. On a shared, queue-less node with several GPUs, pick a free card and pin it
+first, so the run cannot touch a card another user is on:
+
+```bash
+gpustat                         # or nvidia-smi — find a free card
+export CUDA_VISIBLE_DEVICES=<index>
+julia --project=test -e 'using Pkg; Pkg.test()'
+```
+
+`CUDA_VISIBLE_DEVICES` is a CUDA driver feature that masks every other GPU, so the
+process physically cannot allocate on them and the pinned card appears as device 0
+(CUDA.jl honors it natively — no FFCM.jl code selects a device). The suite prints
+the selected card (name + free memory) before the GPU tests; if it reports several
+GPUs visible and none pinned, it skips the GPU tests and prints this recipe. The
+backend-selection test (`test_gpu_backend_selection.jl`) needs no device and always
+runs.
 
 ## What each file pins
 

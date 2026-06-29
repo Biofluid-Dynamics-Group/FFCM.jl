@@ -20,6 +20,7 @@ using StructArrays: components
     @testset "buffers are device-backed" begin
         @test config.cells.cell_hash isa CuArray
         @test config.cells.original_index isa CuArray
+        @test config.cells.neighbor_map isa CuArray
         @test config.particles.Y_sorted isa CuArray
         @test config.particles.Y_wrapped isa CuArray
         @test components(config.grid.force_density)[1] isa CuArray

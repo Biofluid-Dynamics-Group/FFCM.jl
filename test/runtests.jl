@@ -35,9 +35,27 @@ include("test_utilities.jl")
     # CUDA backend. The not-loaded error check needs no device; the construction
     # and parity tests run only where a CUDA device is functional.
     include("cuda/test_gpu_backend_selection.jl")
-    if CUDA.functional()
-        include("cuda/test_gpu_construction.jl")
+    # On a shared, queue-less node the GPU tests must run on exactly the one card the
+    # user pinned with `CUDA_VISIBLE_DEVICES`; otherwise they would grab the default
+    # device and could clobber another user's job. `CUDA.ndevices()` reflects that
+    # env mask, so requiring a single visible device runs on a single-GPU box without
+    # any env var, runs on a pinned card on the cluster, and skips (with the recipe)
+    # when several GPUs are visible and none is pinned. See test/README.md.
+    if !CUDA.functional()
+        @info "CUDA not functional; skipping GPU tests"
+    elseif CUDA.ndevices() != 1
+        @info "$(CUDA.ndevices()) GPUs visible and none pinned; skipping GPU tests " *
+              "to avoid grabbing a card in use on a shared node. Pick a free GPU " *
+              "and pin it:\n" *
+              "    gpustat            # or nvidia-smi\n" *
+              "    export CUDA_VISIBLE_DEVICES=<index>\n" *
+              "then re-run the tests."
     else
-        @info "CUDA device not functional; skipping GPU construction tests"
+        gpu = CUDA.device()
+        @info "Running GPU tests on device $(CUDA.deviceid(gpu)) ($(CUDA.name(gpu))); " *
+              "free $(Base.format_bytes(CUDA.free_memory())) / " *
+              "$(Base.format_bytes(CUDA.total_memory()))"
+        include("cuda/test_gpu_construction.jl")
+        include("cuda/test_gpu_cell_list.jl")
     end
 end
