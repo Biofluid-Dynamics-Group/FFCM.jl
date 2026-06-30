@@ -56,6 +56,19 @@ include("test_utilities.jl")
               "free $(Base.format_bytes(CUDA.free_memory())) / " *
               "$(Base.format_bytes(CUDA.total_memory()))"
         include("cuda/test_gpu_construction.jl")
-        include("cuda/test_gpu_cell_list.jl")
+        # Construction is kernel-free, but the parity tests launch device kernels. Some
+        # partially-supported toolkit/device combinations reject the kernel module at
+        # load (ERROR_NOT_SUPPORTED) — e.g. CUDA 12.9 on a Pascal sm_61 card cannot load
+        # the float-to-int conversion intrinsic the hash/spread kernels use. Run the
+        # kernel parity tests only where a canary kernel actually loads, so the suite
+        # stays green on such a host while still exercising the GPU path where supported.
+        if _gpu_kernels_loadable()
+            include("cuda/test_gpu_cell_list.jl")
+            include("cuda/test_gpu_spread_forces.jl")
+        else
+            @info "GPU kernels do not load on this device/toolkit (e.g. CUDA 12.9 + " *
+                  "Pascal sm_61 rejects the float-to-int conversion intrinsic at module " *
+                  "load); skipping GPU kernel parity tests. They run where the kernels load."
+        end
     end
 end

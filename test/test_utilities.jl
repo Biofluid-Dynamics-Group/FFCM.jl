@@ -66,6 +66,26 @@ function _cpu_gpu_isapprox(cpu, gpu; rtol, atol)
     return isapprox(Array(cpu), Array(gpu); rtol = rtol, atol = atol)
 end
 
+# Probe whether this device can load the FFCM device kernels. Some partially
+# supported toolkit/device combinations compile the kernels to PTX but reject the
+# module at load with ERROR_NOT_SUPPORTED — notably the float-to-int conversion
+# intrinsic (round/floor to Int32) on CUDA 12.9 with a Pascal (sm_61) card. The
+# kernel-dependent parity tests run only where this canary loads, so the suite stays
+# green on such a host while still exercising the GPU path wherever it is supported.
+_canary_int_conversion_kernel!(a) =
+    (@inbounds a[1] = Float32(round(Int32, a[1])); nothing)
+
+function _gpu_kernels_loadable()
+    try
+        a = CUDA.ones(Float32, 1)
+        CUDA.@cuda threads = 1 _canary_int_conversion_kernel!(a)
+        CUDA.synchronize()
+        return true
+    catch
+        return false
+    end
+end
+
 # Positions and forces for a compact particle cluster around the box centre:
 # spacing 0.25 on a 4x4x4 sub-lattice, so many pairs fall within R_c = 1 and
 # the pair-correction branch is exercised. Forces are a deterministic
