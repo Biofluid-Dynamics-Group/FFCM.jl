@@ -105,6 +105,42 @@ single-block scan but allocates a transient aggregate buffer for the multi-block
 scan of a large cell count; an allocation-free scan for large grids is a deferred
 follow-up (recorded below).
 
+### Step 3 kernel: force spreading
+
+Force spreading ([force-spreading.md](force-spreading.md), the spreading operator of
+§3 equation (25)) is ported to the device by adding a GPU method, dispatched on the
+device buffer types, to the same `_spread_forces_kernel!` the CPU backend defines. The
+public `spread_forces!` wrapper and `mobility!` stay backend-agnostic; the backend split
+is the single dispatch seam on the buffer storage type.
+
+The device kernel mirrors cuFCM's active block-per-particle shared-memory spreading
+kernel, monopole (force) only:
+
+- **One block per particle** (block-stride over particles for $N$ beyond the grid). Each
+  block stages its particle's position and force in shared memory.
+- **Separable precompute into shared memory.** The block's threads cooperatively fill, for
+  the $M_G$ stencil points on each axis, the 1-D Gaussian weights
+  $\texttt{inv\_norm} \cdot \exp(-x_i^2 \cdot \texttt{inv\_2Σ²})$, the axis-squared
+  distances $x_i^2$, and the periodic-wrapped 1-based grid indices
+  $\mathrm{mod}(g_i, M_i) + 1$. This block-local shared memory *replaces* the CPU's global
+  `stencil` scratch — the device kernel does not read the `stencil` sub-struct buffers at
+  all (the sub-struct table anticipates this: "may become block-local device memory").
+- **Atomic scatter over the support patch.** The block's threads sweep the $M_G^3$ stencil
+  points; each forms the modified-kernel weight $(a_0 + a_2 r^2)\, g_x g_y g_z$ and
+  `atomic`-adds the force contribution to the three components of the grid force density.
+  The atomic accumulation order is unspecified, so the spread grid matches the CPU's only
+  to round-off (the parity tolerance) — the deterministic-reduction caveat the package
+  already carries.
+
+The polynomial coefficients $(a_0, a_2)$ and Gaussian normalisation come from the same
+`_modified_kernel_coefficients` the CPU kernel uses (computed once on the host and passed
+in), and the anchor $j_i = \mathrm{round}(Y_i \cdot \texttt{inv\_h})$ and the periodic
+wrap follow the CPU conventions, so the two backends agree numerically. The force density
+is zeroed per component before the launch, matching the CPU kernel's in-call zeroing. The
+launch shape (threads per block, block cap) and the choice of shared memory over a
+global-scratch or no-shared-memory variant are benchmark-gated; the initial port takes
+cuFCM's block-per-particle shared-memory shape unchanged.
+
 ## Contract
 
 ### `gpu_acceleration` keyword
@@ -184,6 +220,11 @@ contract, once the kernels are in place.
 - CPU↔CUDA parity fixtures in `test/test_utilities.jl` build a GPU configuration
   mirroring the standard CPU test configuration and compare results; they are
   exercised per step as the GPU kernels land.
+- `test/cuda/test_gpu_spread_forces.jl` — CPU↔CUDA parity of the spread force density
+  (compared to the documented tolerance, since the atomic scatter fixes the result but
+  not the summation order) and `CUDA.@allocated == 0` for `spread_forces!`. The sorted
+  position/force buffers are populated directly and identically on both backends, so the
+  test isolates spreading from the cell-list sort.
 
 ## Differences from cuFCM
 
@@ -220,3 +261,12 @@ follow-up, worth revisiting if reproducibility is required or atomic contention
 bottlenecks at extreme cell occupancy. cuFCM also precomputes the neighbour map
 (`bulkmap`); computing the half-shell on the fly in the GPU correction would drop
 the only backend-divergent field — also a benchmark-gated follow-up.
+
+**Step 3 — spreading.** cuFCM's active spreading kernel
+(`cufcm_mono_dipole_distribution_bpp_shared_dynamic`) distributes the monopole force and
+the dipole/torque contributions in one block-per-particle pass, staging per-axis Gaussian
+factors in shared memory and writing the grid with atomics. This package ports the same
+block-per-particle shared-memory + atomic architecture but drops the dipole/torque terms
+(force-only scope), staging and accumulating only the monopole force. The CPU-style
+one-thread-per-particle spread (and any no-shared-memory variant) is a benchmark-gated
+follow-up, not the initial port.
