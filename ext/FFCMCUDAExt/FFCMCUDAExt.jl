@@ -12,16 +12,19 @@ module FFCMCUDAExt
 using FFCM
 using CUDA
 using StaticArrays: SVector
-using StructArrays: StructArray
+using StructArrays: StructArray, components
 
 import FFCM:
     _assemble_gpu_buffers,
     _assign_cells_kernel!,
     _build_cell_list_kernel!,
     _gather_particles_kernel!,
+    _modified_kernel_coefficients,
+    _spread_forces_kernel!,
     wrap_positions!
 
 include("config.jl")
 include("cell_list.jl")
+include("spread_forces.jl")
 
 end # module FFCMCUDAExt
