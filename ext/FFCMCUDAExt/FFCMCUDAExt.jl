@@ -26,8 +26,10 @@ import FFCM:
     _interpolate_velocities_kernel!,
     _min_image,
     _modified_kernel_coefficients,
+    _retrieve_mobility_output!,
     _self_correction,
     _spread_forces_kernel!,
+    _stage_mobility_io!,
     wrap_positions!
 
 include("config.jl")
@@ -36,5 +38,6 @@ include("spread_forces.jl")
 include("stokes_solve.jl")
 include("interpolate.jl")
 include("correct_velocities.jl")
+include("mobility.jl")
 
 end # module FFCMCUDAExt

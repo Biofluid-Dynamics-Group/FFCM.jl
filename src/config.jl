@@ -38,19 +38,31 @@ the caller's positions and forces into (paper §4), kept distinct from the
 integer cell-list bookkeeping in `CellBuffers`.
 
 The storage type `Mat` is `Matrix{T}` on the CPU backend and the device matrix
-type on the GPU backend.
+type on the GPU backend. `Staging` is the backend-divergent type of the
+host↔device staging buffers: `Nothing` on the CPU (which consumes the caller's
+host arrays directly) and the device matrix type on the GPU, where `mobility!`
+uploads the caller's positions/forces into `Y_input`/`F_input` and downloads the
+velocities from `V_output`, hiding the host↔device traffic
+(`spec/cuda-conventions.md`, "Assembled operator: the host↔device boundary").
 
 # Fields
 - `Y_wrapped::Mat`: caller positions folded into the periodic box (so the
   caller's `Y` is never mutated).
 - `Y_sorted::Mat`, `F_sorted::Mat`: positions and forces in cell-sorted order.
+- `Y_input::Staging`, `F_input::Staging`: `nothing` on the CPU; on the GPU the
+  device-resident copies of the caller's raw `3xN` positions and forces.
+- `V_output::Staging`: `nothing` on the CPU; on the GPU the device-resident `3xN`
+  velocity output, copied back into the caller's `V` after the pipeline.
 
-See `spec/particle-sorting.md`.
+See `spec/particle-sorting.md`, `spec/mobility.md`.
 """
-struct ParticleBuffers{Mat}
+struct ParticleBuffers{Mat, Staging}
     Y_wrapped::Mat
     Y_sorted::Mat
     F_sorted::Mat
+    Y_input::Staging
+    F_input::Staging
+    V_output::Staging
 end
 
 """
@@ -401,6 +413,7 @@ function _assemble_cpu_buffers(
     )
     particles = ParticleBuffers(
         Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N), Matrix{T}(undef, 3, N),
+        nothing, nothing, nothing,
     )
 
     M_x, M_y, M_z = num_grid_points

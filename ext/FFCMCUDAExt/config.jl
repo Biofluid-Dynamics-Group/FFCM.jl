@@ -39,6 +39,12 @@ function _assemble_gpu_buffers(
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),
+        # Host↔device staging: device-resident copies of the caller's raw positions and
+        # forces and of the velocity output, so `mobility!` accepts host arrays and hides the
+        # traffic (spec/cuda-conventions.md, "Assembled operator: the host↔device boundary").
+        CuMatrix{T}(undef, 3, N),
+        CuMatrix{T}(undef, 3, N),
+        CuMatrix{T}(undef, 3, N),
     )
 
     M_x, M_y, M_z = num_grid_points

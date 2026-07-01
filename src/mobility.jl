@@ -34,15 +34,29 @@ function mobility!(
             "V, Y, and F must each be 3xN for the config's N = $(N); got " *
             "size(V) = $(size(V)), size(Y) = $(size(Y)), size(F) = $(size(F))",
         ))
-    wrap_positions!(config.particles.Y_wrapped, Y, config.L)
+    Y_staged, F_staged, V_staged = _stage_mobility_io!(config.particles, Y, F, V)
+    wrap_positions!(config.particles.Y_wrapped, Y_staged, config.L)
     assign_cells!(config, config.particles.Y_wrapped)
-    sort_particles_by_cell!(config, config.particles.Y_wrapped, F)
+    sort_particles_by_cell!(config, config.particles.Y_wrapped, F_staged)
     spread_forces!(config)
     stokes_solve!(config)
-    interpolate_velocities!(V, config)
-    correct_velocities!(V, config)
+    interpolate_velocities!(V_staged, config)
+    correct_velocities!(V_staged, config)
+    _retrieve_mobility_output!(V, config.particles, V_staged)
     return V
 end
+
+# Host↔device staging seam bracketing the pipeline. On the CPU backend the six
+# steps consume the caller's host arrays directly, so staging returns them
+# unchanged and retrieval is a no-op — the CPU path is exactly the bare pipeline,
+# copy-free and allocation-free. The GPU extension overrides both methods to
+# upload the caller's positions/forces into device buffers and download the
+# velocities, hiding the host↔device traffic (spec/cuda-conventions.md,
+# "Assembled operator: the host↔device boundary"). Dispatched on the `particles`
+# storage type, so `mobility!` carries no backend branch; `Staging === Nothing`
+# marks the CPU backend, mirroring the `nothing` neighbour map in `cells`.
+_stage_mobility_io!(::ParticleBuffers{<:Any, Nothing}, Y, F, V) = (Y, F, V)
+_retrieve_mobility_output!(V, ::ParticleBuffers{<:Any, Nothing}, V_staged) = V
 
 """
     FFCMMobility(config, Y) -> FFCMMobility
