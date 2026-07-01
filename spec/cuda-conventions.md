@@ -141,6 +141,43 @@ launch shape (threads per block, block cap) and the choice of shared memory over
 global-scratch or no-shared-memory variant are benchmark-gated; the initial port takes
 cuFCM's block-per-particle shared-memory shape unchanged.
 
+### Step 4 kernel: Stokes solve
+
+The Fourier-space Stokes inversion ([stokes-solve.md](stokes-solve.md), the inverse Stokes
+operator of §3 equations (32)–(33)) needs no backend-specific entry point — `stokes_solve!`
+is already backend-agnostic. Its three forward and three inverse transforms go through the
+`mul!(out, plan, in)` (AbstractFFTs) interface, which dispatches to the cuFFT R2C/C2R plans
+the assembly builds on the device, so the transforms run on the GPU unchanged. The one
+host-loop piece, the in-place per-mode projection `_apply_inverse_stokes_kernel!`, gets a
+device method dispatched on the device buffer types — the single dispatch seam, mirroring
+Step 3.
+
+The whole step stays device-resident: the forward cuFFT writes the spectrum into `fluid_hat`
+on the device, the projection kernel reads and writes it in place, and the inverse cuFFT
+reads it straight back — nothing returns to the host.
+
+The device kernel mirrors cuFCM's active `cufcm_flow_solve`, force (monopole) only:
+
+- **One thread per Fourier mode** over the half-spectrum $(M_x/2+1) \times M_y \times M_z$, a
+  grid-stride elementwise map — no shared memory, no atomics (the projection is purely local
+  in the Fourier index, so the single in-place `fluid_hat` buffer is race-free). The launch
+  takes cuFCM's 32 threads per block (`FCM_THREADS_PER_BLOCK`); the block count covers the
+  spectrum.
+- **Reused device wavenumbers.** Each thread reads $k_x[i_x], k_y[i_y], k_z[i_z]$ from the
+  per-axis vectors the assembly copied to the device, exactly as the CPU kernel indexes its
+  host vectors — the two backends see bit-identical wavevectors. (cuFCM recomputes the
+  wavevector inline from the thread index because it never precomputes the vectors; reusing
+  the device vectors is equivalent and keeps the tested wrap-layout in one place.)
+- **Per-mode projection.** For $k^2 = \boldsymbol{k}\cdot\boldsymbol{k}$ the thread forms
+  $\hat{\boldsymbol f} \leftarrow \frac{1}{\mu k^2 M}\,(\hat{\boldsymbol f} -
+  \boldsymbol{k}\,(\boldsymbol{k}\cdot\hat{\boldsymbol f})/k^2)$ and writes the three
+  components back, with the $\boldsymbol{k}=\boldsymbol 0$ mode a guarded write of zero (the
+  mean-flow gauge fix). This is the same arithmetic as the CPU kernel; both cuFFT C2R and
+  FFTW `brfft` are unnormalised, so the same $1/M$ round-trip factor applies.
+
+The launch shape (32 versus a larger block, any change to the grid-stride mapping) is
+benchmark-gated; the initial port takes cuFCM's shape unchanged.
+
 ## Contract
 
 ### `gpu_acceleration` keyword
@@ -225,6 +262,10 @@ contract, once the kernels are in place.
   not the summation order) and `CUDA.@allocated == 0` for `spread_forces!`. The sorted
   position/force buffers are populated directly and identically on both backends, so the
   test isolates spreading from the cell-list sort.
+- `test/cuda/test_gpu_stokes_solve.jl` — CPU↔CUDA parity of the Stokes-solved
+  `fluid_velocity` (forward FFT → per-mode projection → inverse FFT, to the documented
+  tolerance) and `CUDA.@allocated == 0` for `stokes_solve!`. The force density is written
+  directly and identically on both backends, isolating the solve from spreading.
 
 ## Differences from cuFCM
 
@@ -270,3 +311,10 @@ block-per-particle shared-memory + atomic architecture but drops the dipole/torq
 (force-only scope), staging and accumulating only the monopole force. The CPU-style
 one-thread-per-particle spread (and any no-shared-memory variant) is a benchmark-gated
 follow-up, not the initial port.
+
+**Step 4 — Stokes solve.** cuFCM's `cufcm_flow_solve` recomputes each mode's wavevector
+inline from the thread index and launches `FCM_THREADS_PER_BLOCK = 32` threads per block.
+This package reuses the per-axis wavenumber vectors already resident on the device — the only
+kernel-level divergence, keeping the CPU and GPU wavevectors bit-identical and the
+wrap-layout derivation in one place — and keeps cuFCM's 32-thread launch. A larger block or
+a different grid-stride mapping is a benchmark-gated follow-up.

@@ -243,12 +243,13 @@ The hot path is allocation-free and type-stable on `T <: AbstractFloat`.
   the inner; the projection is purely local in the Fourier index.
 - **The $\boldsymbol{k} = \boldsymbol{0}$ mode** is a single constant-time guarded write of
   zero.
-- **GPU revisit.** The CPU-favourable choices here will need re-examination for the future
-  GPU backend: the $\boldsymbol{k} = \boldsymbol{0}$ branch (a divergent thread on the GPU,
-  where a compute-then-zero pattern is more natural), the precomputed wavenumber vectors
-  (a global-memory read on the GPU versus index arithmetic each thread already has), and
-  the single in-place `fluid_hat` buffer (race-free per Fourier point, so it should
-  transcribe directly).
+- **GPU backend.** The Fourier-space projection is ported to CUDA as a device method of
+  `_apply_inverse_stokes_kernel!` (see [cuda-conventions.md](cuda-conventions.md), Step 4):
+  one thread per Fourier mode over the same half-spectrum, reusing the per-axis wavenumber
+  vectors the GPU assembly leaves resident on the device — rather than recomputing them
+  inline as cuFCM does — so the two backends see bit-identical wavevectors. The single
+  in-place `fluid_hat` buffer is race-free per Fourier point and transcribes directly, and
+  the $\boldsymbol{k} = \boldsymbol{0}$ mode stays a guarded write of zero on the GPU too.
 
 ## Verification
 
@@ -327,8 +328,8 @@ kernel) and `cuFCM/src/CUFCM_SOLVER.cu` (plan construction, buffer setup, and th
 | Real-space buffers | `hx, hy, hz` reused as both FFT input (force) and output (velocity). | Separate `force_density` and `fluid_velocity`. | **Diverge** — debuggability and step 3 ↔ 4 decoupling outweigh three extra `Array{T, 3}`. |
 | Fourier-space buffers | separate `fk_*` (force) and `uk_*` (velocity). | a single `fluid_hat` overwritten in place. | **Diverge** — the projection is per-point-local, so one buffer is race-free; saves three complex arrays. |
 | Number of FFT plans | one r2c and one c2r, each applied three times. | identical. | **Adopt** — independently natural. |
-| Per-mode wavenumber | computed inline in the kernel. | precomputed `k_x/k_y/k_z`. | **Diverge** — inline compute is a GPU choice; on CPU precomputing saves branches and multiplies per Fourier point. |
-| $\boldsymbol{k} = \boldsymbol{0}$ handling | compute-then-fix: produce `NaN`, then overwrite with zero. | an explicit guarded write of zero, no `NaN` intermediates. | **Diverge** — on CPU a single branch is faster and avoids polluting debugging with `NaN`. |
+| Per-mode wavenumber | computed inline in the kernel. | precomputed `k_x/k_y/k_z`, reused on both backends (the GPU reads the device-resident vectors). | **Diverge** — precomputing saves per-point branches and multiplies on CPU and keeps the CPU and GPU wavevectors bit-identical; the reference recomputes inline only because it never precomputes. |
+| $\boldsymbol{k} = \boldsymbol{0}$ handling | compute-then-fix: produce `NaN`, then overwrite with zero. | an explicit guarded write of zero, no `NaN` intermediates (both backends). | **Diverge** — a single guarded branch avoids polluting debugging with `NaN`, and the GPU uses it too. |
 | Normalisation point | folded into the per-mode scalar. | same ($\alpha = 1/(\mu k^2 M)$). | **Adopt**. |
 | Viscosity | implicit $\mu = 1$. | explicit `μ`, validated $> 0$. | **Diverge** — downstream users plug in their physical $\mu$ without non-dimensionalising. |
 | FFT call sequencing | three r2c, `cufcm_flow_solve`, three c2r. | identical via `mul!`. | **Adopt**. |
