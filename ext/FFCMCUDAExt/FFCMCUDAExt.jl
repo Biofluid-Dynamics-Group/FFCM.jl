@@ -21,6 +21,7 @@ import FFCM:
     _assign_cells_kernel!,
     _build_cell_list_kernel!,
     _gather_particles_kernel!,
+    _interpolate_velocities_kernel!,
     _modified_kernel_coefficients,
     _spread_forces_kernel!,
     wrap_positions!
@@ -29,5 +30,6 @@ include("config.jl")
 include("cell_list.jl")
 include("spread_forces.jl")
 include("stokes_solve.jl")
+include("interpolate.jl")
 
 end # module FFCMCUDAExt
