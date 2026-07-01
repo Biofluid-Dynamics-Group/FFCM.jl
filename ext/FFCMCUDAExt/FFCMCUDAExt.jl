@@ -11,10 +11,12 @@ module FFCMCUDAExt
 
 using FFCM
 using CUDA
+using LinearAlgebra: dot
 using StaticArrays: SVector
 using StructArrays: StructArray, components
 
 import FFCM:
+    _apply_inverse_stokes_kernel!,
     _assemble_gpu_buffers,
     _assign_cells_kernel!,
     _build_cell_list_kernel!,
@@ -26,5 +28,6 @@ import FFCM:
 include("config.jl")
 include("cell_list.jl")
 include("spread_forces.jl")
+include("stokes_solve.jl")
 
 end # module FFCMCUDAExt
