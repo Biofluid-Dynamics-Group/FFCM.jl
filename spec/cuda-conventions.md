@@ -218,6 +218,58 @@ the CPU conventions, so the two backends agree numerically. The launch shape and
 of shared memory over a global-scratch variant are benchmark-gated; the initial port takes
 cuFCM's block-per-particle shared-memory shape unchanged.
 
+### Step 6 kernel: pairwise correction
+
+The real-space pairwise correction ([pairwise-correction.md](pairwise-correction.md), the
+correction operator of §3 equation (31) and the self term of Appendix B) is ported to the
+device by adding a GPU method to `_correct_velocities_kernel!`, VF (force) only.
+
+**The dispatch seam.** Unlike the same-signature seams of Steps 3–5, the GPU correction needs
+two inputs the CPU kernel does not: the half-shell `neighbor_map` and `inv_cell_size`. The
+shared `_correct_velocities_kernel!` signature therefore carries both, and dispatch is on the
+`neighbor_map` argument:
+
+- `neighbor_map::Nothing` selects the CPU method, which walks all 27 surrounding cells on the
+  fly and ignores both `neighbor_map` and `inv_cell_size`;
+- `neighbor_map::CuVector{Int32}` selects the GPU method, which walks the 13 forward
+  half-shell neighbours from the map.
+
+This is the symmetric mirror of the Step 3 spread seam, where the GPU method ignores the
+CPU's `stencil` scratch arguments; here the CPU method ignores the GPU's neighbour map and
+`inv_cell_size`. The wrapper `correct_velocities!` passes `config.cells.neighbor_map` and
+`config.inv_cell_size`; the backend stays encoded in the buffer/neighbour-map storage types
+(the `cells` sub-struct's second type parameter, "Sub-struct boundaries" above), so
+`mobility!` sees no runtime branch.
+
+The device kernel mirrors cuFCM's active pair-correction kernel (`cufcm_pair_correction`):
+
+- **One thread per sorted particle** (grid-stride). The thread recomputes its particle's cell
+  from the wrapped position with the same floor/clamp/linearise hash as Step 1 (hence the
+  `inv_cell_size`), seeds its accumulator with the self term $\delta \boldsymbol{F}_i$ (folded
+  in, not cuFCM's separate `cufcm_self_correction` kernel), and reads the pair scalars from
+  the same `_correction_scalars` the CPU uses.
+- **Intra-cell, correction to $i$ only.** The thread sweeps every other particle in its own
+  cell and adds the pair correction to its own accumulator (particle $j$'s own thread corrects
+  $j$). No atomics.
+- **Inter-cell half-shell, atomic dual write.** The thread sweeps the 13 forward neighbour
+  cells from `neighbor_map[13·icell .+ 1 : 13·icell + 13]`; each in-range pair is visited
+  once, and because the VF correction tensor is symmetric, the same scalars give both the
+  correction to $i$ (accumulated in a register) and the correction to $j$ (from
+  $\boldsymbol{F}_i$, with the separation antisymmetric, atomic-added to $j$'s original-order
+  column).
+- **Atomic self+to-$i$ write.** The accumulated self+to-$i$ correction is atomic-added to
+  `V[:, original_index[i]]`, atomic because a neighbour particle's thread may target the same
+  column. `V` enters holding the interpolated velocity in original order, so every write is an
+  additive `+=` correction (realising $\mathcal{M} = \tilde{\mathcal{M}} + (\mathcal{M} -
+  \tilde{\mathcal{M}})$).
+
+The minimum image, the $r^2 < R_c^2$ cutoff, and the pair/self scalar closed forms are the
+CPU kernel's. Because `_min_image` is exactly antisymmetric, each pair's separation — and
+hence its scalars — is bit-identical between the two backends, so only the atomic summation
+order differs and the corrected velocity matches the CPU's to round-off (the parity
+tolerance). The launch shape is benchmark-gated; the initial port takes a grid-stride
+thread-per-particle launch.
+
 ## Contract
 
 ### `gpu_acceleration` keyword
@@ -313,6 +365,12 @@ contract, once the kernels are in place.
   sorted→original permutation, and the fluid velocity field are written directly and
   identically on both backends, isolating the gather from the cell-list sort and the
   upstream spread/solve.
+- `test/cuda/test_gpu_correct.jl` — CPU↔CUDA parity of the corrected velocities (intra-cell
+  gather + half-shell atomic dual write + folded self term, to the documented tolerance,
+  since the atomic order differs from the CPU's serial accumulation), the $\Sigma = \sigma$
+  vanishing case, and `CUDA.@allocated == 0` for `correct_velocities!`. The cell list is
+  built once on the CPU backend and copied to the device, isolating the correction from the
+  GPU cell-list sort.
 
 ## Differences from cuFCM
 
@@ -378,3 +436,16 @@ per-grid-point weight) and writes in original order via `original_index` (cuFCM 
 and unsorts separately), both matching the CPU kernel. The stencil precompute is duplicated
 from the spread kernel for now; factoring a shared device stencil-fill helper (mirroring the
 CPU's shared `_fill_particle_stencil!`) is a benchmark-gated follow-up.
+
+**Step 6 — pairwise correction.** cuFCM's active correction kernels (`cufcm_pair_correction`
++ `cufcm_self_correction`) apply the VF (and rotational) correction one thread per particle:
+intra-cell onto $i$ only, inter-cell over a 13-neighbour half-shell map (`bulkmap`) with an
+atomic dual write to both particles, and the self term in a separate kernel. This package
+ports the same architecture, force-only, and consumes the same precomputed device-resident
+half-shell neighbour map (built once on the host at construction). The one deliberate
+simplification: the self term is **folded** into the per-particle accumulator (added to the
+same atomic write) rather than launched as a second kernel, saving the extra launch and the
+second global read/write pass over $\boldsymbol{V}$ and $\boldsymbol{F}$. It keeps the
+round-nearest minimum image (`_min_image`, exactly antisymmetric) where cuFCM truncates
+($\texttt{int}(x/(0.5L))$) — equivalent for $r < L/2$. The grid-stride thread-per-particle
+launch shape is a benchmark-gated follow-up.
