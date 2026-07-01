@@ -150,7 +150,9 @@ function correct_velocities!(V::AbstractMatrix{T}, config::FFCMConfig{T}) where 
         config.cells.cell_start,
         config.cells.cell_end,
         config.cells.original_index,
+        config.cells.neighbor_map,
         config.num_cells,
+        config.inv_cell_size,
         config.L,
         config.σ,
         config.Σ,
@@ -163,8 +165,8 @@ end
 
 """
     _correct_velocities_kernel!(
-        V, Y_sorted, F_sorted, cell_start, cell_end, original_index,
-        num_cells, L, σ, Σ, a, μ, R_c,
+        V, Y_sorted, F_sorted, cell_start, cell_end, original_index, neighbor_map,
+        num_cells, inv_cell_size, L, σ, Σ, a, μ, R_c,
     ) -> V
 
 Kernel for `correct_velocities!`. Computes the self scalar once, then iterates cells in
@@ -182,7 +184,12 @@ particle writes only its own column — a gather, no write race.
 - `cell_start::Vector{Int32}`, `cell_end::Vector{Int32}`: the 1-based inclusive per-cell
   slot ranges.
 - `original_index::Vector{Int32}`: the sorted-slot to original-particle permutation.
+- `neighbor_map::Nothing`: `nothing` on the CPU backend, which walks all 27 surrounding
+  cells on the fly; the GPU backend passes the half-shell neighbour map here instead, and
+  this argument is the dispatch discriminator between the two backends.
 - `num_cells::NTuple{3, Int32}`: the cell-grid dimensions.
+- `inv_cell_size::NTuple{3, T}`: the inverse cell sizes; unused by the CPU method (which
+  walks cells directly), carried for the GPU backend that recomputes a particle's cell.
 - `L::NTuple{3, T}`: the periodic box lengths.
 - `σ::T`, `Σ::T`, `a::T`, `μ::T`: the kernel widths, particle radius, and viscosity.
 - `R_c::T`: the correction cutoff radius.
@@ -206,7 +213,9 @@ function _correct_velocities_kernel!(
     cell_start::Vector{Int32},
     cell_end::Vector{Int32},
     original_index::Vector{Int32},
+    neighbor_map::Nothing,
     num_cells::NTuple{3, Int32},
+    inv_cell_size::NTuple{3, T},
     L::NTuple{3, T},
     σ::T,
     Σ::T,
