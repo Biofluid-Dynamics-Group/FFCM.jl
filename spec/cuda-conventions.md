@@ -178,6 +178,46 @@ The device kernel mirrors cuFCM's active `cufcm_flow_solve`, force (monopole) on
 The launch shape (32 versus a larger block, any change to the grid-stride mapping) is
 benchmark-gated; the initial port takes cuFCM's shape unchanged.
 
+### Step 5 kernel: interpolation / gather
+
+Velocity interpolation ([interpolation.md](interpolation.md), the interpolation operator of
+§3 equation (26)) is ported to the device by adding a GPU method, dispatched on the device
+buffer types, to the same `_interpolate_velocities_kernel!` the CPU backend defines. The
+public `interpolate_velocities!` wrapper and `mobility!` stay backend-agnostic; the backend
+split is the single dispatch seam on the buffer storage type, mirroring Step 3.
+
+The device kernel mirrors cuFCM's active block-per-particle shared-memory gather kernel
+(`cufcm_particle_velocities_bpp_shared_dynamic`), monopole (force) only — the gather mirror
+of the Step 3 spread's scatter:
+
+- **One block per particle** (block-stride over particles for $N$ beyond the grid), 32
+  threads per block. Each block stages its particle's position in shared memory.
+- **Separable precompute into shared memory.** As in the spread, the block's threads fill
+  the per-axis Gaussian weights, axis-squared distances, and periodic-wrapped 1-based grid
+  indices for the $M_G$ stencil points on each axis; this block-local shared memory replaces
+  the CPU's global `stencil` scratch (the device kernel does not read the `stencil`
+  sub-struct buffers). The precompute is duplicated from the spread kernel for now; factoring
+  a shared device stencil-fill helper is a benchmark-gated cleanup (recorded below).
+- **Warp-reduced gather, no atomics.** The block's threads sweep the $M_G^3$ stencil; each
+  accumulates a partial modified-kernel-weighted velocity
+  $\sum u(\boldsymbol{x}_g)(a_0 + a_2 r^2) g_x g_y g_z$ over its slice. Because the 32-thread
+  block is a single warp, a warp-shuffle reduction sums the partials with no shared reduction
+  scratch and no atomics — the gather only reads the grid and each particle writes its own
+  output column, so there is no write race (unlike the spread's atomic scatter). The
+  summation order differs from the CPU's serial accumulation, so the interpolated velocity
+  matches the CPU's only to round-off (the parity tolerance) — the deterministic-reduction
+  caveat the package already carries.
+- **$h^3$ once, original-order write.** Lane 0 scales the reduced velocity by the quadrature
+  factor $h^3$ once and writes `V[:, original_index[np]]`, folding the inverse step-2
+  permutation into the write so `V` lands in the caller's original order (matching the CPU
+  kernel; cuFCM writes in sorted order and unsorts separately).
+
+The polynomial coefficients $(a_0, a_2)$ and Gaussian normalisation come from the same
+`_modified_kernel_coefficients` the CPU kernel uses, and the anchor and periodic wrap follow
+the CPU conventions, so the two backends agree numerically. The launch shape and the choice
+of shared memory over a global-scratch variant are benchmark-gated; the initial port takes
+cuFCM's block-per-particle shared-memory shape unchanged.
+
 ## Contract
 
 ### `gpu_acceleration` keyword
@@ -266,6 +306,13 @@ contract, once the kernels are in place.
   `fluid_velocity` (forward FFT → per-mode projection → inverse FFT, to the documented
   tolerance) and `CUDA.@allocated == 0` for `stokes_solve!`. The force density is written
   directly and identically on both backends, isolating the solve from spreading.
+- `test/cuda/test_gpu_interpolate.jl` — CPU↔CUDA parity of the interpolated particle
+  velocities (block-per-particle shared-memory gather + warp reduction, to the documented
+  tolerance, since the reduction order differs from the CPU's serial accumulation) and
+  `CUDA.@allocated == 0` for `interpolate_velocities!`. The sorted positions, the
+  sorted→original permutation, and the fluid velocity field are written directly and
+  identically on both backends, isolating the gather from the cell-list sort and the
+  upstream spread/solve.
 
 ## Differences from cuFCM
 
@@ -318,3 +365,16 @@ This package reuses the per-axis wavenumber vectors already resident on the devi
 kernel-level divergence, keeping the CPU and GPU wavevectors bit-identical and the
 wrap-layout derivation in one place — and keeps cuFCM's 32-thread launch. A larger block or
 a different grid-stride mapping is a benchmark-gated follow-up.
+
+**Step 5 — interpolation / gather.** cuFCM's active gather kernel
+(`cufcm_particle_velocities_bpp_shared_dynamic`) interpolates the monopole velocity and the
+dipole/torque terms in one block-per-particle pass, staging per-axis Gaussian factors in
+shared memory and summing over the stencil with a `cub::BlockReduce`. This package ports the
+same block-per-particle shared-memory architecture but drops the dipole/torque terms
+(force-only scope), and — because the 32-thread block is a single warp — reduces with a warp
+shuffle rather than a general block reduce (equivalent, no shared scratch). It applies the
+$h^3$ quadrature factor once per particle after the reduction (cuFCM folds it into the
+per-grid-point weight) and writes in original order via `original_index` (cuFCM writes sorted
+and unsorts separately), both matching the CPU kernel. The stencil precompute is duplicated
+from the spread kernel for now; factoring a shared device stencil-fill helper (mirroring the
+CPU's shared `_fill_particle_stencil!`) is a benchmark-gated follow-up.
