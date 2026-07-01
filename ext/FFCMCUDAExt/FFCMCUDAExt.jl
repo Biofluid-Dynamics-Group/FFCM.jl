@@ -20,9 +20,13 @@ import FFCM:
     _assemble_gpu_buffers,
     _assign_cells_kernel!,
     _build_cell_list_kernel!,
+    _correct_velocities_kernel!,
+    _correction_scalars,
     _gather_particles_kernel!,
     _interpolate_velocities_kernel!,
+    _min_image,
     _modified_kernel_coefficients,
+    _self_correction,
     _spread_forces_kernel!,
     wrap_positions!
 
@@ -31,5 +35,6 @@ include("cell_list.jl")
 include("spread_forces.jl")
 include("stokes_solve.jl")
 include("interpolate.jl")
+include("correct_velocities.jl")
 
 end # module FFCMCUDAExt
