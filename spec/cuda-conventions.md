@@ -35,7 +35,10 @@ of its sub-structs ([mobility.md](mobility.md), "Backend selection"). Because th
 type carries the backend, the step functions dispatch on their buffer arguments
 with no runtime branch: a config holding device arrays selects the device
 kernels, a config holding host arrays selects the host kernels, and `mobility!`
-itself is identical source for both.
+itself is identical source for both — including the host↔device staging that
+brackets the pipeline on the GPU backend, which is a dispatched seam (a no-op on
+the CPU backend), not a `gpu_acceleration` test in the operator body (see
+"Assembled operator: the host↔device boundary").
 
 The user expresses this as a single intent flag, `gpu_acceleration::Bool`, rather
 than naming a device array type. The flag hides the CUDA vocabulary from callers
@@ -270,6 +273,37 @@ order differs and the corrected velocity matches the CPU's to round-off (the par
 tolerance). The launch shape is benchmark-gated; the initial port takes a grid-stride
 thread-per-particle launch.
 
+### Assembled operator: the host↔device boundary
+
+The six per-step kernels run on the device buffers `config` owns. The caller of `mobility!`,
+however, passes ordinary host $3 \times N$ arrays `Y`, `F`, `V` — a GPU-backed configuration
+must not oblige the caller to allocate device arrays (CLAUDE.md §1; the `gpu_acceleration`
+flag hides the CUDA vocabulary). The assembled operator therefore stages the caller's arrays
+across the host↔device boundary: it uploads `Y` and `F` into device buffers before step 1
+and copies the computed velocities from a device buffer back into the caller's `V` after
+step 6. Everything between the two edges stays resident on the device (the six kernels never
+touch the host), mirroring cuFCM's single device-resident pipeline.
+
+The staging is itself a dispatched seam, not a runtime branch: `mobility!` opens with a stage
+call and closes with a retrieve call, both dispatched on the `particles` sub-struct storage
+type. On the CPU backend the stage call returns the caller's arrays unchanged and the
+retrieve call is a no-op — the CPU path is byte-for-byte the previous behaviour, allocation-
+free and free of any copy. On the GPU backend the stage call `copyto!`s `Y` and `F` into
+device staging buffers and the retrieve call `copyto!`s the device velocities back. Because
+the seam dispatches like the six steps, `mobility!` remains one source with no
+`gpu_acceleration` test in its body, and the `FFCMMobility` operator and its `mul!` methods
+keep their host scratch and drive a GPU configuration unchanged — the traffic is hidden one
+level below the linear-operator interface.
+
+The GPU-backed `particles` sub-struct owns three extra device buffers for this — the
+device-resident copies of the caller's raw positions and forces and of the velocity output —
+which mirror cuFCM's persistent device position/force/velocity arrays. The CPU-backed
+`particles` carries `nothing` in their place, exactly as `cells` carries `nothing` for the
+device-only neighbour map. A caller who already holds device arrays is served correctly too
+(the `copyto!` is then a device→device copy); a zero-copy fast path for that case, and
+caching the `Y` upload for an operator whose positions are fixed across a linear solve, are
+benchmark-gated follow-ups.
+
 ## Contract
 
 ### `gpu_acceleration` keyword
@@ -371,6 +405,13 @@ contract, once the kernels are in place.
   vanishing case, and `CUDA.@allocated == 0` for `correct_velocities!`. The cell list is
   built once on the CPU backend and copied to the device, isolating the correction from the
   GPU cell-list sort.
+- `test/cuda/test_gpu_mobility.jl` — CPU↔CUDA parity of the whole assembled operator: the
+  same host positions and forces are fed to `mobility!` on a CPU config and a GPU config, and
+  the velocities agree to the documented tolerance for a single sphere, a clustered pair (so
+  the correction fires), and a random cloud. Because the caller passes host arrays to both
+  backends, this also exercises the host↔device staging seam end-to-end. It asserts
+  `CUDA.@allocated == 0` for `mobility!` and drives a GPU config through the `FFCMMobility` /
+  `mul!` interface (host scratch, device pipeline).
 
 ## Differences from cuFCM
 
@@ -449,3 +490,11 @@ second global read/write pass over $\boldsymbol{V}$ and $\boldsymbol{F}$. It kee
 round-nearest minimum image (`_min_image`, exactly antisymmetric) where cuFCM truncates
 ($\texttt{int}(x/(0.5L))$) — equivalent for $r < L/2$. The grid-stride thread-per-particle
 launch shape is a benchmark-gated follow-up.
+
+**Assembled operator — host↔device staging.** cuFCM uploads positions and forces to
+persistent device arrays once and downloads velocities at the end, keeping the whole solve
+device-resident. This package mirrors that (device-resident pipeline, device position/force/
+velocity buffers) but, because `mobility!` is a per-call operator with no separate setup
+phase, it re-uploads `Y` and `F` and downloads `V` on every call. Caching the `Y` upload for
+an operator whose positions are fixed across a linear solve (the `FFCMMobility` case), and a
+zero-copy path when the caller already holds device arrays, are benchmark-gated follow-ups.

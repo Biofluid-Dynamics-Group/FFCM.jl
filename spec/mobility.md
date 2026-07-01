@@ -101,6 +101,13 @@ throws `ArgumentError`; `Float64` on the GPU additionally emits a non-fatal warn
 backend architecture and the CPU↔CUDA parity contract are specified in
 [cuda-conventions.md](cuda-conventions.md).
 
+Either backend takes and returns the caller's host $3 \times N$ `Y`, `F`, `V`: a GPU
+configuration hides all host↔device traffic, uploading the inputs and downloading the
+velocities internally, so the caller never allocates or handles a device array. The staging
+is a dispatched seam (a no-op on the CPU backend), so `mobility!` — and the `FFCMMobility`
+operator built on it — is one source across both backends
+([cuda-conventions.md](cuda-conventions.md), "Assembled operator: the host↔device boundary").
+
 ### `mobility!(V, config, Y, F)`
 
 - `Y`, `F`, `V` are caller-owned $3 \times N$ matrices (column $n$ is particle $n$, row $i$
