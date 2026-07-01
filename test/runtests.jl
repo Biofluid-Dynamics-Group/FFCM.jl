@@ -65,6 +65,7 @@ include("test_utilities.jl")
         if _gpu_kernels_loadable()
             include("cuda/test_gpu_cell_list.jl")
             include("cuda/test_gpu_spread_forces.jl")
+            include("cuda/test_gpu_stokes_solve.jl")
         else
             @info "GPU kernels do not load on this device/toolkit (e.g. CUDA 12.9 + " *
                   "Pascal sm_61 rejects the float-to-int conversion intrinsic at module " *
