@@ -40,7 +40,7 @@ first, so the run cannot touch a card another user is on:
 ```bash
 gpustat                         # or nvidia-smi — find a free card
 export CUDA_VISIBLE_DEVICES=<index>
-julia --project=test -e 'using Pkg; Pkg.test()'
+julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
 `CUDA_VISIBLE_DEVICES` is a CUDA driver feature that masks every other GPU, so the

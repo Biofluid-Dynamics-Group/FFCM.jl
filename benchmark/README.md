@@ -93,3 +93,10 @@ Nothing in the suite hardcodes a machine: sizes are selected with
 `FFCM_BENCHMARK_SIZES`, threading follows `julia -t`, and judge comparisons
 are relative to a baseline recorded on the same hardware rather than to
 absolute thresholds.
+
+## Reference-implementation baseline
+
+[`cufcm-baseline.md`](cufcm-baseline.md) records a one-time measurement of
+cuFCM — the paper authors' reference CUDA implementation — on an RTX 2080 Ti,
+together with the exact configuration and its FFCM.jl equivalent. Future
+`cuda/` leaves at that configuration can be compared against it directly.
