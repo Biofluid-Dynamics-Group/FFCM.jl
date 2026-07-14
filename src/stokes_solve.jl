@@ -17,8 +17,6 @@ factor compensates the unnormalised FFTW round-trip.
 # Returns
 - `config`: the same configuration, with `config.grid.fluid_velocity` holding the Stokes velocity
   field.
-
-See `spec/stokes-solve.md`.
 """
 function stokes_solve!(config::FFCMConfig{T}) where {T}
     fx, fy, fz = components(config.grid.force_density)
@@ -68,8 +66,6 @@ Preconditions (caller-guaranteed, so the loops are `@inbounds`): the three compo
 are `Array{Complex{T}, 3}` of shape `(length(k_x), length(k_y), length(k_z))`;
 `k_x[1] = k_y[1] = k_z[1] = 0` (the FFTW wrap-around layout puts the zero mode at the
 leading index).
-
-See `spec/stokes-solve.md`.
 """
 function _apply_inverse_stokes_kernel!(
     fx̂::AbstractArray{Complex{T}, 3},

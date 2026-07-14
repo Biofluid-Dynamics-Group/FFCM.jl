@@ -2,11 +2,10 @@
 # 2024, §3 equations (32)–(33)). `stokes_solve!` is backend-agnostic: its forward/inverse
 # transforms go through `mul!` (cuFFT on the device), and the in-place per-mode projection
 # `_apply_inverse_stokes_kernel!` gets this device method, dispatched on the device buffer
-# types. The kernel mirrors cuFCM's active `cufcm_flow_solve`, monopole (force) only. See
-# spec/stokes-solve.md, spec/cuda-conventions.md.
+# types. Monopole (force) only; the whole step stays device-resident.
 
 # One thread per Fourier mode over the half-spectrum, grid-stride, 32 threads per block
-# (cuFCM's FCM_THREADS_PER_BLOCK). Launch tuning is a deferred, benchmark-gated experiment.
+# (one warp). Launch tuning is a deferred, benchmark-gated experiment.
 @inline function _stokes_solve_launch(total::Integer)
     threads = 32
     blocks = max(cld(Int(total), threads), 1)

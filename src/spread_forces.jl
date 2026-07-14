@@ -13,8 +13,6 @@ of the call).
 # Returns
 - `config`: the same configuration, with `config.grid.force_density` overwritten by the spread
   force density.
-
-See `spec/force-spreading.md`.
 """
 function spread_forces!(config::FFCMConfig{T}) where {T}
     _spread_forces_kernel!(
@@ -41,8 +39,9 @@ end
         stencil_gaussian, stencil_r², stencil_index,
     ) -> force_density
 
-Kernel for `spread_forces!`. For each particle, anchor the stencil at
-`j_i = round(Y_{n,i}/h)` (cuFCM convention, paper Table 1 calibration), fill the per-axis
+Kernel for `spread_forces!`. For each particle, anchor the stencil at the nearest grid
+point `j_i = round(Y_{n,i}/h)` (the anchoring the paper's §5 Table 1 calibration assumes),
+fill the per-axis
 1-D Gaussian weights, axis-squared distances, and periodic-wrapped 1-based stencil indices
 via `_fill_particle_stencil!`, and accumulate `F_n ⋅ (a₀ + a₂⋅r²) ⋅ g_x⋅g_y⋅g_z` into the
 SoA components of `force_density`. The polynomial coefficients `(a₀, a₂)` and the Gaussian
@@ -70,8 +69,6 @@ shape `(3, N)`; the stencil scratch fields have length `M_G`; `force_density` an
 scratch fields are backed by per-component arrays via `StructArrays.components`
 (`force_density` by three `Array{T, 3}` of shape `(M_x, M_y, M_z)`); positions have been
 folded into `[0, L_i)` by `wrap_positions!`.
-
-See `spec/force-spreading.md`.
 """
 function _spread_forces_kernel!(
     force_density,

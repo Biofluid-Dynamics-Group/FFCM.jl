@@ -1,12 +1,13 @@
 # GPU device kernel for pipeline step 3 — force spreading (Su & Keaveny 2024, §3
 # equation (25), §4). A device method of `_spread_forces_kernel!`, dispatched on the
-# device buffer types, so `spread_forces!` and `mobility!` stay backend-agnostic. The
-# kernel mirrors cuFCM's active block-per-particle shared-memory spreading kernel,
-# monopole (force) only. See spec/force-spreading.md, spec/cuda-conventions.md.
+# device buffer types, so `spread_forces!` and `mobility!` stay backend-agnostic. A
+# block-per-particle kernel, monopole (force) only: each block stages its particle's
+# separable stencil in dynamic shared memory and atomically scatters the force to the
+# grid.
 
 # Block-per-particle launch: one block per particle (block-stride for N beyond the grid),
-# 32 threads per block (cuFCM's FCM_THREADS_PER_BLOCK). Launch tuning is a deferred,
-# benchmark-gated experiment.
+# 32 threads per block (one warp). Launch tuning is a deferred, benchmark-gated
+# experiment.
 @inline function _spread_launch(N::Integer)
     threads = 32
     blocks = max(Int(N), 1)
@@ -73,8 +74,8 @@ function _spread_forces_device!(
         sync_threads()
 
         @inbounds Y1, Y2, Y3 = Y_priv[1], Y_priv[2], Y_priv[3]
-        # Nearest-grid anchor per axis (cuFCM convention, paper Table 1 calibration),
-        # matching the CPU `_fill_particle_stencil!`.
+        # Nearest-grid anchor per axis (the anchoring the paper's §5 Table 1 calibration
+        # assumes), matching the CPU `_fill_particle_stencil!`.
         j1 = round(Int32, Y1 * inv_h)
         j2 = round(Int32, Y2 * inv_h)
         j3 = round(Int32, Y3 * inv_h)

@@ -1,15 +1,13 @@
 # GPU device kernel for pipeline step 5 — velocity interpolation / gather (Su & Keaveny
 # 2024, §3 equation (26), §4). A device method of `_interpolate_velocities_kernel!`,
 # dispatched on the device buffer types, so `interpolate_velocities!` and `mobility!` stay
-# backend-agnostic. The kernel mirrors cuFCM's active block-per-particle shared-memory
-# gather kernel (`cufcm_particle_velocities_bpp_shared_dynamic`), monopole (force) only —
-# the gather mirror of the step-3 spread's scatter. See spec/interpolation.md,
-# spec/cuda-conventions.md.
+# backend-agnostic. A block-per-particle shared-memory gather, monopole (force) only —
+# the gather mirror of the step-3 spread's scatter, with no atomics (the gather only
+# reads the grid and each particle writes its own output column).
 
 # Block-per-particle launch: one block per particle (block-stride for N beyond the grid),
-# 32 threads per block (cuFCM's FCM_THREADS_PER_BLOCK). The 32-thread block is a single
-# warp, so the block reduction is a warp-shuffle reduction. Launch tuning is a deferred,
-# benchmark-gated experiment.
+# 32 threads per block. The 32-thread block is a single warp, so the block reduction is a
+# warp-shuffle reduction. Launch tuning is a deferred, benchmark-gated experiment.
 @inline function _gather_launch(N::Integer)
     threads = 32
     blocks = max(Int(N), 1)
@@ -89,8 +87,8 @@ function _interpolate_velocities_device!(
         sync_threads()
 
         @inbounds Y1, Y2, Y3 = Y_priv[1], Y_priv[2], Y_priv[3]
-        # Nearest-grid anchor per axis (cuFCM convention, paper Table 1 calibration),
-        # matching the CPU `_fill_particle_stencil!`.
+        # Nearest-grid anchor per axis (the anchoring the paper's §5 Table 1 calibration
+        # assumes), matching the CPU `_fill_particle_stencil!`.
         j1 = round(Int32, Y1 * inv_h)
         j2 = round(Int32, Y2 * inv_h)
         j3 = round(Int32, Y3 * inv_h)

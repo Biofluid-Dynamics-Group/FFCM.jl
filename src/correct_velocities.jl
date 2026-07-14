@@ -17,8 +17,6 @@ It vanishes at `Σ = σ` (the standard-FCM limit).
 
 # Returns
 - `T`: the scalar self-correction term added to every particle's velocity.
-
-See `spec/pairwise-correction.md`.
 """
 function _self_correction(σ::T, Σ::T, a::T, μ::T) where {T}
     σ²_minus_Σ² = σ^2 - Σ^2
@@ -38,10 +36,25 @@ of particle `n` from the force `F_m` on a neighbour `m` is
 
     ΔV_n += isotropic_coefficient⋅F_m + parallel_coefficient⋅(x⋅F_m)⋅x,  x = Y_n - Y_m.
 
-With `η = μ`, `σ²_minus_Σ² = σ²−Σ²`, `erf_{2w} = erf(r/(2w))` (the √2-scaled-width argument;
-see the spec for the equation-(31) `erf`-argument typo note), and Gaussians
-`Δ(w) = (4πw²)^{-3/2}⋅e^{-r²/4w²}`, the grouped coefficients of `(erf_{2σ}-erf_{2Σ})`, `Δ(σ)`,
-and `Δ(Σ)` are as documented in `spec/pairwise-correction.md`.
+With `η = μ`, `erf_{2w} = erf(r/(2w))`, and the √2-scaled-width Gaussians
+`Δ(w) = (4πw²)^{-3/2}⋅e^{-r²/4w²}`, the two coefficients group by their transcendental
+factor — the `erf` difference, `Δ(σ)`, and `Δ(Σ)` — as
+
+    isotropic_coefficient =
+        (erf_{2σ} − erf_{2Σ}) ⋅ (1/(8πμr) + σ²/(4πμr³))
+        − (2σ⁴/(μr²)) ⋅ Δ(σ)
+        + [2Σ⁴/(μr²) + ((σ²−Σ²)/μ)(1 + 2Σ²/r²)
+           − ((σ²−Σ²)²/4) ⋅ (2 − r²/(2Σ²))/(2μΣ²)] ⋅ Δ(Σ)
+
+    parallel_coefficient =
+        (erf_{2σ} − erf_{2Σ}) ⋅ (1/(8πμr³) − 3σ²/(4πμr⁵))
+        + (6σ⁴/(μr⁴)) ⋅ Δ(σ)
+        + [−6Σ⁴/(μr⁴) − ((σ²−Σ²)/(μr²))(1 + 6Σ²/r²)
+           − ((σ²−Σ²)²/4) ⋅ 1/(4μΣ⁴)] ⋅ Δ(Σ)
+
+so only two `erf` and two `exp` are evaluated per interaction. The printed equation (31)
+misprints the `erf` argument as `r/(w√2)`; the regularised Stokeslet of equations (12) and
+(14) fixes it as `r/(2w)`, which this function implements.
 
 # Arguments
 - `r::T`: the centre-to-centre separation `|Y_n - Y_m|`. Must be `> 0`.
@@ -54,8 +67,6 @@ and `Δ(Σ)` are as documented in `spec/pairwise-correction.md`.
 
 # Notes
 Valid for `r > 0`; the `r = 0` diagonal is the separate `_self_correction`.
-
-See `spec/pairwise-correction.md`.
 """
 function _correction_scalars(r::T, σ::T, Σ::T, μ::T) where {T}
     r² = r^2
@@ -139,8 +150,6 @@ scalars of `_correction_scalars` and the closed-form self term. The result compl
 
 # Returns
 - `V`: the same matrix, with the pairwise + self correction added.
-
-See `spec/pairwise-correction.md`.
 """
 function correct_velocities!(V::AbstractMatrix{T}, config::FFCMConfig{T}) where {T}
     _correct_velocities_kernel!(
@@ -203,8 +212,6 @@ have shape `(3, N)`; `cell_start`/`cell_end` have length `prod(num_cells)` with
 `num_cells[i] ≥ 3`; `original_index` is a permutation of `1:N`; positions folded into
 `[0, L_i)`; `R_c ≤ min(L)/2` (enforced by the constructor) so the minimum image is
 unambiguous.
-
-See `spec/pairwise-correction.md`.
 """
 function _correct_velocities_kernel!(
     V::AbstractMatrix{T},

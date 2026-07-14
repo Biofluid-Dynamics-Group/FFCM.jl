@@ -5,7 +5,7 @@
 # stay device-resident; dispatched on the device `particles` storage type, so `mobility!`
 # carries no backend branch (the CPU methods in `src/mobility.jl` are the identity/no-op). A
 # caller already holding device arrays is served too — the `copyto!` is then a device→device
-# copy. See spec/cuda-conventions.md, "Assembled operator: the host↔device boundary".
+# copy.
 
 function _stage_mobility_io!(
     particles::FFCM.ParticleBuffers{<:CuMatrix, <:CuMatrix}, Y, F, V,

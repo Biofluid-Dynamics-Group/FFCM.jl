@@ -18,8 +18,6 @@ function folds `Y` in place.
 # Notes
 The floating point roundoff corner case where `mod(y, L_i)` rounds to exactly `L_i` is left
 to the downstream cell-index clamp in `_assign_cells_kernel!`.
-
-See `spec/spatial-hashing.md`.
 """
 function wrap_positions!(
     destination::AbstractMatrix{T}, source::AbstractMatrix{T}, L::NTuple{3, T},
@@ -62,8 +60,6 @@ Preconditions (the caller guarantees these, so the loops are `@inbounds`):
 `cell_hash[n] ∈ 0:total-1` for every particle `n`, where `total = length(cell_start)`;
 `original_index` has length `N`; `cell_start`, `cell_end`, `counting_sort_scratch` all have
 length `total`.
-
-See `spec/particle-sorting.md`.
 """
 function _build_cell_list_kernel!(
     original_index::Vector{Int32},
@@ -119,8 +115,6 @@ On return, `config` holds:
 
 # Returns
 - `config`: the same configuration, with the sort outputs populated.
-
-See `spec/particle-sorting.md`.
 """
 function sort_particles_by_cell!(
     config::FFCMConfig{T}, Y::AbstractMatrix{T}, F::AbstractMatrix{T},
@@ -161,8 +155,6 @@ step 2).
 Preconditions (caller-guaranteed, so the loop is `@inbounds`): all five arrays have second
 dimension `N = length(original_index)`; `Y`, `F`, `Y_sorted`, `F_sorted` have first
 dimension 3; `original_index[s] ∈ 1:N`.
-
-See `spec/particle-sorting.md`.
 """
 function _gather_particles_kernel!(
     Y_sorted::AbstractMatrix{T},
@@ -197,8 +189,6 @@ into `config.cells.cell_hash`. The hash linearises the 3-D cell coordinate with 
 
 # Returns
 - `config.cells.cell_hash`: the per-particle 0-based cell indices.
-
-See `spec/spatial-hashing.md`.
 """
 function assign_cells!(config::FFCMConfig{T}, Y::AbstractMatrix{T}) where {T}
     _assign_cells_kernel!(
@@ -228,8 +218,6 @@ particle column of `Y`, with cell coordinates
 `min(⋅, m_i - 1)` clamp defends against the floating point roundoff corner where
 `Y_i ⋅ inv_cell_size_i` lands exactly at `m_i` and the floored cell index would otherwise be
 one past the last valid cell.
-
-See `spec/spatial-hashing.md`.
 """
 function _assign_cells_kernel!(
     cell_hash::Vector{Int32},
@@ -266,8 +254,6 @@ Geometry-only and built once on the host; the CUDA extension copies the result t
 
 # Returns
 - `Vector{Int32}` of length `13 * prod(num_cells)`: the per-cell neighbour cell indices.
-
-See `spec/particle-sorting.md`, `spec/cuda-conventions.md`.
 """
 function _build_neighbor_map(num_cells::NTuple{3, Int32})
     m_x, m_y, m_z = num_cells

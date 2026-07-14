@@ -8,7 +8,7 @@ The storage type `IntVector` is `Vector{Int32}` on the CPU backend and the
 device vector type on the GPU backend, so the backend is a type-parameter swap.
 `NeighborMap` is the single backend-divergent field: `Nothing` on the CPU (whose
 correction computes neighbours on the fly) and the device half-shell map on the
-GPU (`spec/cuda-conventions.md`).
+GPU.
 
 # Fields
 - `cell_hash::IntVector`: per-particle 0-based linear cell index (length `N`).
@@ -20,8 +20,6 @@ GPU (`spec/cuda-conventions.md`).
 - `neighbor_map::NeighborMap`: `nothing` on the CPU; on the GPU the device vector
   of 13 forward half-shell neighbour cells per cell (length `13 * prod(num_cells)`),
   built by `_build_neighbor_map` and consumed by the pairwise correction.
-
-See `spec/spatial-hashing.md`, `spec/particle-sorting.md`.
 """
 struct CellBuffers{IntVector, NeighborMap}
     cell_hash::IntVector
@@ -42,8 +40,7 @@ type on the GPU backend. `Staging` is the backend-divergent type of the
 host↔device staging buffers: `Nothing` on the CPU (which consumes the caller's
 host arrays directly) and the device matrix type on the GPU, where `mobility!`
 uploads the caller's positions/forces into `Y_input`/`F_input` and downloads the
-velocities from `V_output`, hiding the host↔device traffic
-(`spec/cuda-conventions.md`, "Assembled operator: the host↔device boundary").
+velocities from `V_output`, hiding the host↔device traffic.
 
 # Fields
 - `Y_wrapped::Mat`: caller positions folded into the periodic box (so the
@@ -53,8 +50,6 @@ velocities from `V_output`, hiding the host↔device traffic
   device-resident copies of the caller's raw `3xN` positions and forces.
 - `V_output::Staging`: `nothing` on the CPU; on the GPU the device-resident `3xN`
   velocity output, copied back into the caller's `V` after the pipeline.
-
-See `spec/particle-sorting.md`, `spec/mobility.md`.
 """
 struct ParticleBuffers{Mat, Staging}
     Y_wrapped::Mat
@@ -77,8 +72,6 @@ GPU backend.
 # Fields
 - `force_density::GridField`: spread force density `J̃†[F]` (output of `spread_forces!`).
 - `fluid_velocity::GridField`: Stokes velocity field (output of `stokes_solve!`).
-
-See `spec/force-spreading.md`, `spec/stokes-solve.md`.
 """
 struct GridBuffers{GridField}
     force_density::GridField
@@ -102,8 +95,6 @@ the CPU backend and cuFFT plans on the GPU backend.
 - `forward_fourier_transform::FwdTransform`,
   `inverse_fourier_transform::InvTransform`: the real-to-complex and
   complex-to-real plans.
-
-See `spec/stokes-solve.md`.
 """
 struct SolverState{SpectralField, RealVector, FwdTransform, InvTransform}
     fluid_hat::SpectralField
@@ -126,8 +117,6 @@ The storage type swaps with the backend.
 - `stencil_gaussian::StencilField`: separable Gaussian stencil weights (length `M_G`).
 - `stencil_r²::StencilField`: squared distances to the stencil grid points (length `M_G`).
 - `stencil_index::StencilIndexField`: periodic-wrapped grid indices (length `M_G`).
-
-See `spec/force-spreading.md`, `spec/interpolation.md`.
 """
 struct StencilBuffers{StencilField, StencilIndexField}
     stencil_gaussian::StencilField
@@ -203,9 +192,6 @@ the domain lengths `L`, which must be a concrete subtype of `AbstractFloat`.
   type-parameter-free form additionally throws if `eltype(L)` is not a concrete subtype of
   `AbstractFloat` (integer or mixed-precision lengths are rejected, not promoted — the
   working precision is an explicit choice).
-
-See `spec/spatial-hashing.md`, `spec/particle-sorting.md`, `spec/force-spreading.md`,
-`spec/stokes-solve.md`, and `spec/cuda-conventions.md`.
 """
 struct FFCMConfig{T <: AbstractFloat, Cells, Particles, Grid, Solver, Stencil}
     L::NTuple{3, T}
@@ -243,8 +229,6 @@ half under the transform and is built inline.
 
 # Returns
 - `Vector{T}` of length `M`: the per-axis wavevector components.
-
-See `spec/stokes-solve.md`.
 """
 function _wrap_wavevectors(M::Int32, L::T) where {T}
     twoπ = T(2) * T(π)
@@ -264,8 +248,6 @@ Maps the public planner-effort name to the FFTW planner flag: `:estimate` to
 
 # Returns
 - `UInt32`: the FFTW planner flag.
-
-See `spec/stokes-solve.md`.
 """
 function _fftw_planner_flag(fft_planning::Symbol)
     return fft_planning === :estimate ? ESTIMATE :
@@ -340,8 +322,6 @@ if the induced grid spacing is anisotropic (paper §3 assumes uniform `h`).
 # Returns
 - `NamedTuple` with `num_cells`, `cell_size`, `inv_cell_size`, `σ`, `Σ`, `h`, `inv_h`, and
   the host wavevectors `k_x`, `k_y`, `k_z` (the backend assembly moves them to the device).
-
-See `spec/spatial-hashing.md`, `spec/stokes-solve.md`.
 """
 function _derive_scalars(
     ::Type{T};
@@ -385,7 +365,7 @@ end
 Allocates the CPU-backed sub-struct buffers and builds the FFTW plans (paper §3, §5). The
 real grid buffers are allocated unzeroed and zeroed only after the plans are built on them:
 the measuring planner efforts execute candidate transforms on the input array, overwriting
-its contents (spec/stokes-solve.md).
+its contents.
 
 # Returns
 - `Tuple` of `CellBuffers`, `ParticleBuffers`, `GridBuffers`, `SolverState`,
@@ -476,8 +456,6 @@ end
 Builds the GPU-backed sub-struct buffers and cuFFT plans. The concrete method is supplied by
 the `FFCMCUDAExt` extension; this fallback fires when `gpu_acceleration = true` is requested
 without `using CUDA` having loaded the extension, and reports that requirement.
-
-See `spec/cuda-conventions.md`.
 """
 _assemble_gpu_buffers(args...) = throw(ArgumentError(
     "gpu_acceleration = true requires the CUDA backend; run `using CUDA` on a " *
@@ -515,7 +493,7 @@ function FFCMConfig{T}(;
 
     cells, particles, grid, solver, stencil = if gpu_acceleration
         # The neighbour map is geometry-only; build it once on the host and let the
-        # extension copy it to the device (spec/cuda-conventions.md).
+        # extension copy it to the device.
         _assemble_gpu_buffers(
             T, N, num_grid_points, M_G_i32, num_cells_total,
             derived.k_x, derived.k_y, derived.k_z,

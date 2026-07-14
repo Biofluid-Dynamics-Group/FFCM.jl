@@ -2,10 +2,10 @@
 # 2024, §3 equation (31), Appendix B, §4). A device method of `_correct_velocities_kernel!`,
 # dispatched on the device buffer types (the `neighbor_map::CuVector` discriminates the GPU
 # backend from the CPU's `neighbor_map::Nothing`), so `correct_velocities!` and `mobility!`
-# stay backend-agnostic. The kernel mirrors cuFCM's active pair-correction kernel
-# (`cufcm_pair_correction`), VF (force) only, with the self term folded into the
-# per-particle accumulator (cuFCM applies it in a separate `cufcm_self_correction` kernel).
-# See spec/pairwise-correction.md, spec/cuda-conventions.md.
+# stay backend-agnostic. One thread per sorted particle, VF (force) only: an intra-cell
+# self-gather plus a 13-cell half-shell neighbour sweep with an atomic dual write to both
+# partners, and the self term folded into the per-particle accumulator (no separate
+# self-correction pass).
 
 # Grid-stride launch, one thread per sorted particle. 256 threads per block; launch tuning is
 # a deferred, benchmark-gated experiment.

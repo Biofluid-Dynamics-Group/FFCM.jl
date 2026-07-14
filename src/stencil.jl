@@ -18,8 +18,6 @@ these four scalars.
   `a₂ = (σ²−Σ²)/(2Σ⁴)` are the polynomial coefficients, `inv_norm = 1/√(2πΣ²)` the Gaussian
   normalisation, and `inv_2Σ² = 1/(2Σ²)` the exponent scale. At the standard FCM limit
   `Σ = σ` the prefactor degenerates to `a₀ = 1`, `a₂ = 0` (the unmodified Gaussian).
-
-See `spec/force-spreading.md` and `spec/interpolation.md`.
 """
 function _modified_kernel_coefficients(σ::T, Σ::T) where {T}
     Σ² = Σ^2
@@ -45,7 +43,8 @@ both place and weight the `M_G³` stencil through this function — interpolatio
 discrete adjoint of spreading, so the geometry must be identical.
 
 For each axis the stencil is nearest-anchored at `j_i = round(Y_i ⋅ inv_h)`
-(`RoundNearestTiesToEven`, the cuFCM `my_rint` convention; paper §5 Table 1 calibration).
+(`RoundNearestTiesToEven`; the nearest-grid-point anchoring the paper's §5 Table 1
+calibration assumes).
 For `k ∈ 1:M_G` it writes, with `x_i = (j_i - ⌊M_G/2⌋ + (k-1))⋅h - Y_i` the unwrapped
 per-axis stencil distance:
 
@@ -77,8 +76,6 @@ per-axis stencil distance:
 Preconditions (caller-guaranteed, so the loop is `@inbounds`): the three scratch fields
 have length `M_G`; `half_M_G = M_G ÷ 2`; `num_grid_points` holds `(M_x, M_y, M_z)`; the
 position has been folded into `[0, L_i)` by `wrap_positions!`.
-
-See `spec/force-spreading.md` and `spec/interpolation.md`.
 """
 function _fill_particle_stencil!(
     stencil_gaussian,

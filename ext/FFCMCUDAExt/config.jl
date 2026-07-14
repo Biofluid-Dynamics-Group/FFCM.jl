@@ -13,8 +13,6 @@ the device and stored on `cells`; the CPU backend stores `nothing` there instead
 # Returns
 - `Tuple` of `FFCM.CellBuffers`, `FFCM.ParticleBuffers`, `FFCM.GridBuffers`,
   `FFCM.SolverState`, `FFCM.StencilBuffers`, all backed by `CuArray` and cuFFT plans.
-
-See `spec/cuda-conventions.md`.
 """
 function _assemble_gpu_buffers(
     ::Type{T},
@@ -40,8 +38,8 @@ function _assemble_gpu_buffers(
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),
         # Host↔device staging: device-resident copies of the caller's raw positions and
-        # forces and of the velocity output, so `mobility!` accepts host arrays and hides the
-        # traffic (spec/cuda-conventions.md, "Assembled operator: the host↔device boundary").
+        # forces and of the velocity output, so `mobility!` accepts host arrays and hides
+        # the traffic.
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),

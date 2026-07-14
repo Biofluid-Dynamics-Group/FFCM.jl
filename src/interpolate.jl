@@ -19,8 +19,6 @@ operator symmetric positive-definite.
 
 # Returns
 - `V`: the same matrix, holding the interpolated particle velocities.
-
-See `spec/interpolation.md`.
 """
 function interpolate_velocities!(
     V::AbstractMatrix{T}, config::FFCMConfig{T},
@@ -80,8 +78,6 @@ Preconditions (caller-guaranteed, so the loops are `@inbounds`): `V`, `Y_sorted`
 `(3, N)`; the stencil scratch fields have length `M_G`; `fluid_velocity` is backed by three
 `Array{T, 3}` of shape `(M_x, M_y, M_z)` via `StructArrays.components`; `original_index` is
 a permutation of `1:N`; positions have been folded into `[0, L_i)` by `wrap_positions!`.
-
-See `spec/interpolation.md`.
 """
 function _interpolate_velocities_kernel!(
     V::AbstractMatrix{T},

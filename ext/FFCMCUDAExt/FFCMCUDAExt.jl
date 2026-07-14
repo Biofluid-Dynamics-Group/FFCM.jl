@@ -3,7 +3,7 @@ module FFCMCUDAExt
 # CUDA backend of the Fast FCM mobility operator (Su & Keaveny 2024, §3 and §4).
 # Loaded automatically when a user runs `using CUDA` alongside `using FFCM`,
 # through the package's `[weakdeps]`/`[extensions]` tables. This is the only place
-# CUDA appears; `src` stays free of it (CLAUDE.md §7). See spec/cuda-conventions.md.
+# CUDA appears; `src` stays free of it.
 #
 # The extension mirrors the `src/` layout, one file per pipeline concern:
 # `config.jl` builds the device buffers and cuFFT plans; `cell_list.jl` holds the

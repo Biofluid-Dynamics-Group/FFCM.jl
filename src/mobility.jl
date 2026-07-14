@@ -19,8 +19,6 @@ interpolation, and the real-space correction). The cell list is rebuilt on every
 
 # Throws
 - `DimensionMismatch`: if `V`, `Y`, or `F` is not `3xN` for the `config`'s `N`.
-
-See `spec/mobility.md`.
 """
 function mobility!(
     V::AbstractMatrix{T},
@@ -51,8 +49,7 @@ end
 # unchanged and retrieval is a no-op — the CPU path is exactly the bare pipeline,
 # copy-free and allocation-free. The GPU extension overrides both methods to
 # upload the caller's positions/forces into device buffers and download the
-# velocities, hiding the host↔device traffic (spec/cuda-conventions.md,
-# "Assembled operator: the host↔device boundary"). Dispatched on the `particles`
+# velocities, hiding the host↔device traffic. Dispatched on the `particles`
 # storage type, so `mobility!` carries no backend branch; `Staging === Nothing`
 # marks the CPU backend, mirroring the `nothing` neighbour map in `cells`.
 _stage_mobility_io!(::ParticleBuffers{<:Any, Nothing}, Y, F, V) = (Y, F, V)
@@ -63,10 +60,11 @@ _retrieve_mobility_output!(V, ::ParticleBuffers{<:Any, Nothing}, V_staged) = V
 
 Matrix-free `LinearAlgebra` operator backing the mobility action of `mobility!` for a fixed
 position matrix `Y` and a `config`. It implements `size`, `eltype`, and the three- and
-five-argument `mul!`, so it can be passed to any `mul!`-based iterative solver. It also
-declares `issymmetric` and `isposdef` (both `true`; the operator is symmetric
-positive-definite by construction), so solvers such as `IterativeSolvers.cg!` dispatch on
-them.
+five-argument `mul!` (the latter computing `v .= α⋅(M⋅f) + β⋅v`, with `β = 0` overwriting
+`v` regardless of its prior contents), so it can be passed to any `mul!`-based iterative
+solver. It also declares `issymmetric` and `isposdef` (both `true`; the operator is
+symmetric positive-definite by construction), so solvers such as `IterativeSolvers.cg!`
+dispatch on them.
 
 For convenience, `M * F` applies the operator out of place to a force matrix `F` in the
 natural `3xN` layout, returning a fresh `3xN` velocity matrix (the mirror of `mobility!`).
@@ -86,8 +84,6 @@ owns `3xN` scratch to marshal between the flat vectors and `mobility!`'s matrice
 
 # Throws
 - `ArgumentError`: if `Y` is not `3xN`, or its particle count differs from the `config`'s.
-
-See `spec/mobility.md`.
 """
 struct FFCMMobility{T, C}
     config::C
@@ -152,13 +148,15 @@ end
 
 # `M * F` in the natural `3xN` layout, mirroring `mobility!` but allocating a
 # fresh result. The shape is enforced by `mobility!`'s entry guard. Distinct
-# from the `3Nx3N` flat-vector view used by `mul!` (see spec/mobility.md).
+# from the `3Nx3N` flat-vector view used by `mul!`.
 function Base.:*(M::FFCMMobility{T}, F::AbstractMatrix{T}) where {T}
     N = size(M.Y, 2)
     return mobility!(Matrix{T}(undef, 3, N), M.config, M.Y, F)
 end
 
-# The assembled mobility is symmetric positive-definite by construction (see
-# spec/mobility.md); declaring the traits lets generic solvers dispatch on them.
+# The assembled mobility is symmetric positive-definite by construction —
+# interpolation is the exact discrete adjoint of spreading, the Stokes solve is a
+# symmetric positive-semidefinite per-mode projector, and the pair correction is a
+# symmetric tensor; declaring the traits lets generic solvers dispatch on them.
 issymmetric(::FFCMMobility) = true
 isposdef(::FFCMMobility) = true

@@ -2,7 +2,6 @@
 # (Su & Keaveny 2024, §4). Device methods of the same step functions the CPU
 # backend uses, dispatched on the device buffer types, so the public wrappers
 # (`assign_cells!`, `sort_particles_by_cell!`) and `mobility!` are backend-agnostic.
-# See spec/spatial-hashing.md, spec/particle-sorting.md, spec/cuda-conventions.md.
 
 # Grid-stride launch shape, one thread per particle/slot. 256 threads per block
 # is the default; launch tuning is a deferred, benchmark-gated experiment.
@@ -60,7 +59,9 @@ end
 
 # Counting-sort pass 3: atomically claim each particle's slot from its cell's
 # cursor and record the permutation. The atomic claim makes the scatter
-# non-stable: intra-cell order is unspecified (spec/particle-sorting.md).
+# non-stable: intra-cell order is unspecified (the CPU scatter is stable; the
+# per-cell ranges are identical either way, and downstream sums are
+# order-independent to round-off).
 function _scatter_particles_device!(original_index, cursor, cell_hash, N)
     index = (blockIdx().x - Int32(1)) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
@@ -136,7 +137,8 @@ function _build_cell_list_kernel!(
     # Inclusive prefix sum of the counts gives each cell's last 1-based slot in
     # `cell_end`; the first slot follows from the per-cell count. `accumulate!` is
     # allocation-free for a single-block scan; a large cell count takes CUDA.jl's
-    # multi-block scan, which allocates a transient buffer (spec/cuda-conventions.md).
+    # multi-block scan, which allocates a transient buffer (an allocation-free
+    # scan for large cell counts is a deferred, benchmark-gated follow-up).
     accumulate!(+, cell_end, counting_sort_scratch)
     cell_start .= cell_end .- counting_sort_scratch .+ Int32(1)
 
