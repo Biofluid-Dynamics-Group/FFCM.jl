@@ -7,9 +7,11 @@ hydrodynamic interactions between rigid spheres in a triply-periodic
 Stokes flow.
 
 FFCM is a numerical approximation to the mobility tensor of a collection of identical spherical rigid particles
-suspended in a fluid that obeys the Stokes equation with periodic boundary conditions. Given $N$ spherical particles of radius $a=1$ located at $\left(\boldsymbol{Y}_n\right)_{n = 1}^N \subset \Omega$
-with forces $\left(\boldsymbol{F}_n\right)_{n = 1}^N$ acting on them, FFCM computes
-their resulting velocities $\left(\boldsymbol{V}_n\right)_{n = 1}^N$ considering hydrodynamic interactions.
+suspended in a fluid that obeys the Stokes equation with periodic boundary conditions. Given $N$ spherical particles of radius $a=1$ located at $\left(\boldsymbol{Y}_n\right) _{n = 1}^N \subset \Omega$
+with forces $\left(\boldsymbol{F}_n\right) _{n = 1}^N$ acting on them, FFCM computes
+their resulting velocities $\left(\boldsymbol{V}_n\right) _{n = 1}^N$ considering hydrodynamic interactions.
+
+This package currently _only_ implements the linear force-velocity relationship for each sphere.
 
 ## Usage
 
@@ -62,20 +64,22 @@ The first mobility call after loading the package will trigger compilation, but 
 
 ## Parameter optimisation
 
-_Helpers to calibrate the method parameters (`Σ/σ` (`kernel_widths_ratio`), `R_c`, the
-grid resolution) to target hardware are planned and not yet available._
+The method has three parameters:
+- $\Sigma/\sigma$
+- $R_c$
+- $M_G$
+
+_Helpers to calibrate the method parameters to target hardware are planned and not yet available._
 
 ## GPU acceleration
 
-_A CUDA backend is planned and not yet available._
+If CUDA.jl is available...
 
-## License
-
-MIT — see [LICENSE](LICENSE).
+cuFCM serves as the original CUDA implementation of the method and is used as a reference.
 
 ## LLM assistance
 
-This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus` and `claude-4.6-sonnet` in code generation, test generation, design and documentation.
+This repository was written with assistance of `claude-5-fable`, `claude-4.8-opus`, `claude-4.7-opus`, `claude-5-sonnet` and `claude-4.6-sonnet` in code generation, test generation, design and documentation.
 
 ## Contributing
 
