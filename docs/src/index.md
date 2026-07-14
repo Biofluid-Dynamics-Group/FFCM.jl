@@ -79,10 +79,17 @@ The first `mobility!` (or `M * F`) call after loading the package incurs
 Julia's just-in-time compilation. For timing or long solves, make one warmup
 call on the configuration first; subsequent calls run at full speed.
 
-## API
+On a machine with an NVIDIA GPU, constructing with `gpu_acceleration = true`
+(after `using CUDA`) runs the whole pipeline on the device with the same API —
+see [GPU acceleration](gpu.md).
 
-```@docs
-FFCMConfig
-mobility!
-FFCMMobility
-```
+## Reading this documentation
+
+- The [method pages](method/overview.md) explain the algorithm — the fast-FCM
+  splitting and each pipeline step — citing Su & Keaveny (2024) by section and
+  equation; [Notation](notation.md) maps the paper's symbols to code
+  identifiers.
+- [GPU acceleration](gpu.md) and [Performance tips](performance.md) cover
+  practical use.
+- The [API reference](api.md) documents the three exported names; the
+  [developer documentation](devdocs/architecture.md) documents the internals.

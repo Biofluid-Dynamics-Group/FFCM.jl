@@ -9,7 +9,24 @@ using FFCM
 makedocs(;
     sitename = "FFCM.jl",
     modules = [FFCM],
-    pages = ["Home" => "index.md"],
+    pages = [
+        "Home" => "index.md",
+        "Method" => [
+            "The mobility operator" => "method/overview.md",
+            "Cell lists" => "method/cell-lists.md",
+            "Spreading and interpolation" => "method/spreading-interpolation.md",
+            "The spectral Stokes solve" => "method/stokes-solve.md",
+            "The pairwise correction" => "method/pairwise-correction.md",
+        ],
+        "GPU acceleration" => "gpu.md",
+        "Performance tips" => "performance.md",
+        "Notation" => "notation.md",
+        "API reference" => "api.md",
+        "Developer documentation" => [
+            "Architecture" => "devdocs/architecture.md",
+            "GPU architecture" => "devdocs/gpu-architecture.md",
+        ],
+    ],
     checkdocs = :exports,
     remotes = nothing,
     format = Documenter.HTML(;
