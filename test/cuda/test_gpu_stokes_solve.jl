@@ -11,8 +11,7 @@ using FFCM: stokes_solve!
 # method of `_apply_inverse_stokes_kernel!`. The projection is elementwise per Fourier mode
 # (no atomics), so the solved velocity matches the CPU backend to round-off, compared with
 # the documented relative/absolute tolerances. The force density is written directly and
-# identically on both backends, so this isolates the solve from the spreading step. See
-# spec/cuda-conventions.md, spec/stokes-solve.md.
+# identically on both backends, so this isolates the solve from the spreading step.
 
 @testset "GPU Stokes solve matches the CPU backend" begin
     for T in (Float32, Float64)

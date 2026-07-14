@@ -5,15 +5,14 @@ using Random: Xoshiro
 using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!, correct_velocities!
 
 # CPU↔CUDA parity for pipeline step 6 (the real-space pairwise correction). Runs only where
-# `CUDA.functional()` (guarded in runtests.jl). The GPU kernel mirrors cuFCM: one thread per
-# sorted particle, intra-cell self-gather plus a half-shell neighbour sweep with an atomic
+# `CUDA.functional()` (guarded in runtests.jl). The GPU kernel runs one thread per
+# sorted particle: an intra-cell self-gather plus a half-shell neighbour sweep with an atomic
 # dual write, VF only, and the self term folded into the accumulator. The pair scalars are
 # bit-identical to the CPU's (same `_correction_scalars` on the same separations), so only
 # the atomic summation order differs — the corrected velocity matches the CPU backend to
 # round-off, compared with the documented relative/absolute tolerances. The cell list is
 # built once on the (tested) CPU backend and copied to the device, so this isolates the
-# correction from the GPU cell-list sort. See spec/cuda-conventions.md,
-# spec/pairwise-correction.md.
+# correction from the GPU cell-list sort.
 
 # Builds a consistent cell list on the CPU backend, then copies the sorted buffers and
 # per-cell ranges onto the GPU config so both backends correct identical inputs. The device

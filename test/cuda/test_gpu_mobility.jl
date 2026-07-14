@@ -11,8 +11,7 @@ using LinearAlgebra: mul!
 # so identical host Y/F must yield velocities matching the CPU backend to round-off (the atomic
 # spread/correction and the non-stable device sort fix the result but not the summation order,
 # and the corrected velocity is invariant to the unspecified intra-cell order). This is the
-# end-to-end parity that composes the per-step parity tests. See spec/cuda-conventions.md,
-# spec/mobility.md.
+# end-to-end parity that composes the per-step parity tests.
 
 # Random positions filling the periodic box with a zero-mean random force pattern. A full-box
 # cloud spreads particles across many cells, exercising the device sort, neighbour map, and
@@ -57,7 +56,7 @@ end
 
 @testset "GPU FFCMMobility / mul! matches the CPU backend" begin
     # The matrix-free operator keeps host scratch and drives the device pipeline unchanged:
-    # the host↔device traffic is hidden below the LinearAlgebra interface (spec/mobility.md).
+    # the host↔device traffic is hidden below the LinearAlgebra interface.
     T = Float32
     N = 128
     L = (T(8), T(8), T(8))

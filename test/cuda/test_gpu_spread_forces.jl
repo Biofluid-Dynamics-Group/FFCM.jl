@@ -11,7 +11,7 @@ using FFCM: spread_forces!
 # unspecified: the spread density matches the CPU backend to round-off, compared with the
 # documented relative/absolute tolerances. The sorted position/force buffers are populated
 # directly and identically on both backends, so this isolates spreading from the
-# (separately tested) cell-list sort. See spec/cuda-conventions.md, spec/force-spreading.md.
+# (separately tested) cell-list sort.
 
 @testset "GPU force spreading matches the CPU backend" begin
     for T in (Float32, Float64)

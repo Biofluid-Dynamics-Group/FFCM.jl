@@ -94,7 +94,7 @@ end
             num_grid_points = (M, M, M), M_G = M_G,
         )
         # The assembled driver composes all six steps in one allocation-free,
-        # non-mutating call (spec/mobility.md); Y0 is left untouched.
+        # non-mutating call; Y0 is left untouched.
         V = zeros(T, 3, 1)
         mobility!(V, config, Y0, F)
 

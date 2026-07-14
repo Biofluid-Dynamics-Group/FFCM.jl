@@ -8,8 +8,7 @@ using FFCM
     # scribble surviving in a grid buffer. The σ-regularised periodic
     # self-mobility (lattice-sum oracle in test_utilities.jl) pins the
     # physics; the cross-effort comparison pins that the solution depends on
-    # the planner only through floating-point ordering inside the transforms
-    # (spec/stokes-solve.md).
+    # the planner only through floating-point ordering inside the transforms.
     for T in (Float32, Float64)
         L = (T(8), T(8), T(8))
         Y = T[L[1] / 2; L[2] / 2; L[3] / 2;;]

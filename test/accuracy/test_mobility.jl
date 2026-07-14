@@ -5,8 +5,8 @@ using LinearAlgebra: mul!, dot, issymmetric, isposdef
 
 @testset "mobility! leaves the caller's positions and forces unmodified" begin
     # The hot call folds positions into [0, L) internally (into a config-owned
-    # buffer); the contract is that the caller's Y and F arrays are read-only
-    # (spec/mobility.md). Include out-of-domain coordinates so wrapping has work.
+    # buffer); the contract is that the caller's Y and F arrays are read-only.
+    # Include out-of-domain coordinates so wrapping has work.
     for T in (Float32, Float64)
         N = 4
         config = _standard_test_config(T; N = N)
@@ -24,7 +24,7 @@ end
 @testset "mobility! rejects mismatched V/Y/F sizes" begin
     # The driver writes into config buffers sized for N under @inbounds; an
     # argument that is not 3xN would read or write out of bounds, so the entry
-    # guards the shapes (spec/mobility.md).
+    # guards the shapes.
     for T in (Float32, Float64)
         N = 4
         config = _standard_test_config(T; N = N)
@@ -68,7 +68,7 @@ end
 @testset "Assembled mobility is symmetric positive-definite" begin
     # M^VF = J⋅L⁻¹⋅J† + (M − M̃) is SPD: interpolation is the discrete adjoint of
     # spreading, the Stokes solve is self-adjoint, and the correction is a
-    # symmetric pair tensor (spec/mobility.md). Two particles 0.7 apart fall
+    # symmetric pair tensor. Two particles 0.7 apart fall
     # within R_c = 1, so the off-diagonal pair coupling is exercised.
     for T in (Float32, Float64)
         N = 2
@@ -100,7 +100,7 @@ end
 
 @testset "Three-argument mul! matches mobility!" begin
     # The matrix-free operator is the flat-vector view of mobility!: vec(MF)
-    # column-major (spec/mobility.md).
+    # column-major.
     for T in (Float32, Float64)
         N = 3
         config = _standard_test_config(T; N = N)
@@ -165,7 +165,7 @@ end
 
 @testset "Out-of-place M*F is the mirror of mobility!" begin
     # M*F maps forces in the natural 3xN layout to velocities, allocating a fresh
-    # output (spec/mobility.md). Mirrors mobility! exactly.
+    # output. Mirrors mobility! exactly.
     for T in (Float32, Float64)
         N = 3
         config = _standard_test_config(T; N = N)
@@ -185,7 +185,7 @@ end
 end
 
 @testset "FFCMMobility declares itself symmetric positive-definite" begin
-    # The assembled operator is SPD by construction (spec/mobility.md); declaring
+    # The assembled operator is SPD by construction; declaring
     # the traits lets generic solvers (e.g. cg!) dispatch on them.
     for T in (Float32, Float64)
         N = 2

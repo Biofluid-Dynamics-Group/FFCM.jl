@@ -51,11 +51,11 @@ using StructArrays: components
     end
 end
 
-@testset "Stencil anchors on the nearest grid point, biased low for even M_G (cuFCM convention)" begin
+@testset "Stencil anchors on the nearest grid point, biased low for even M_G" begin
     # For Y/h = 0.3 the nearest grid point is index 0 (0-based); for
     # Y/h = 0.7 it is index 1. With M_G even the stencil extends M_G/2
-    # below the anchor and M_G/2 - 1 above (paper §5 Table 1 calibration
-    # convention, matching cuFCM `my_rint(Y/dx) - ngd/2 + (i mod ngd)`).
+    # below the anchor and M_G/2 - 1 above (the anchoring convention the
+    # paper's §5 Table 1 calibration assumes).
     # We pick `M_G = 4` and an `M_x = 16` grid so the stencil is strictly
     # smaller than the grid and the lower- and upper-half anchors give
     # distinct, periodic-wrapped support sets.
@@ -323,7 +323,8 @@ end
     # matches the closed-form plain Gaussian at every grid point. Off-centre
     # particles also produce a correct standard-FCM spread, but for grid
     # points reached only via the wrap the impl uses the n = ±1 periodic
-    # image's distance (same as cuFCM), which differs from the n = 0
+    # image's distance (the truncated-stencil periodic-image convention),
+    # which differs from the n = 0
     # closed-form Gaussian — a known artefact of truncated-stencil periodic
     # spreading, not relevant to this collapse test.
     for T in (Float32, Float64)

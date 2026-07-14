@@ -66,11 +66,11 @@ runs.
 | `accuracy/test_stokes_solve.jl` | Wavenumber layout; `k = 0` gauge fix; per-mode incompressibility; analytical single mode; linearity; translation/reflection equivariance; `1/μ` scaling | Analytical Fourier solutions and symmetries |
 | `accuracy/test_interpolate_velocities.jl` | Adjoint identity `J = h³⋅Sᵀ`; original-order output; closed-form gather; constant-flow limit; linearity; translation; assembled-operator symmetry | Paper §3; closed-form sums |
 | `accuracy/test_correct_velocities.jl` | Pair correction `A⋅I + B⋅xxᵀ` and self term; `Σ = σ` zero limit; symmetry; linearity; translation/periodic invariance; accumulation into `V` | Full-tensor difference-of-mobilities (paper §2 eqs. (8)–(10), (16)–(17); §3 eqs. (30)–(31); App. B eq. (B.1)) — an algebraically distinct route. Deliberately tests the internal scalars too: they *are* the algebraic collapse under test |
-| `accuracy/test_mobility.jl` | Driver contracts: caller arrays untouched, `DimensionMismatch` guards, linearity, SPD, `mul!` (3- and 5-arg), `M * F`, `issymmetric`/`isposdef` | Operator identities; spec/mobility.md |
+| `accuracy/test_mobility.jl` | Driver contracts: caller arrays untouched, `DimensionMismatch` guards, linearity, SPD, `mul!` (3- and 5-arg), `M * F`, `issymmetric`/`isposdef` | Operator identities; the `mobility!`/`FFCMMobility` docstring contracts |
 | `accuracy/test_mobility_properties.jl` | Linearity, symmetry, positivity across seeded-random domains, grids, widths, and out-of-domain positions | Exact operator identities, reproducible RNG |
 | `accuracy/test_single_sphere_mobility.jl` | **Headline**: end-to-end self-mobility against the reciprocal-lattice regularised-Stokeslet sum; Σ-independence of the assembled operator | Paper §3 eqs. (32)–(33) lattice sum (`Float64` only: the bound is grid-truncation, which `Float32` round-off would mask) |
-| `api/test_*_api.jl` (x7) | `@inferred` + zero allocations for each step entry point and the assembled operator | Hot-path contract tables in each `spec/*.md` |
-| `hygiene/test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | `spec/mobility.md` two-phase public surface |
+| `api/test_*_api.jl` (x7) | `@inferred` + zero allocations for each step entry point and the assembled operator | The hot-path contracts stated in each step's docstring |
+| `hygiene/test_exported_surface.jl` | Exports are exactly `FFCMConfig`, `mobility!`, `FFCMMobility` | The two-phase public surface (`docs/src/devdocs/architecture.md`; the `FFCMConfig`/`mobility!` docstrings) |
 | `hygiene/test_ascii_public_surface.jl` | Exported names and public keyword arguments are ASCII (typeable in any terminal); Unicode stays internal | Method introspection (`Base.kwarg_decl`), with sentinel keywords against vacuous passes |
 | `hygiene/test_aqua.jl` | Package hygiene | Aqua.jl (below) |
 | `hygiene/test_jet.jl` | Whole-call-graph inference and dispatch health | JET.jl (below) |

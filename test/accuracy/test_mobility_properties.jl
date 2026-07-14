@@ -4,7 +4,7 @@ using FFCM
 using LinearAlgebra: dot
 
 # Seeded property tests: the operator identities that define M^VF — linearity
-# in F, symmetry, and positive-definiteness (paper §3; spec/mobility.md) — are
+# in F, symmetry, and positive-definiteness (paper §3) — are
 # exact algebraic properties of the assembled discrete operator, so they must
 # hold for *any* admissible configuration, not just the hand-picked geometries
 # of the accuracy tests. Each trial draws a random domain, grid, kernel-width

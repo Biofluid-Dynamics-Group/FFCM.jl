@@ -12,8 +12,7 @@ using FFCM: interpolate_velocities!
 # backend to round-off, compared with the documented relative/absolute tolerances. The
 # sorted positions, the sorted→original permutation, and the fluid velocity field are
 # written directly and identically on both backends, so this isolates the gather from the
-# cell-list sort and the upstream spread/solve. See spec/cuda-conventions.md,
-# spec/interpolation.md.
+# cell-list sort and the upstream spread/solve.
 
 @testset "GPU velocity interpolation matches the CPU backend" begin
     for T in (Float32, Float64)

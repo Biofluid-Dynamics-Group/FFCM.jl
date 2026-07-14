@@ -1,7 +1,7 @@
 using Test
 using FFCM
 
-# The public surface is the two-phase API (spec/mobility.md): the cold-path
+# The public surface is the two-phase API: the cold-path
 # constructor `FFCMConfig`, the hot-path operator `mobility!`, and the
 # matrix-free `FFCMMobility`. The seven internal step functions stay reachable
 # as `FFCM.spread_forces!` for tests and advanced use, but exporting them would

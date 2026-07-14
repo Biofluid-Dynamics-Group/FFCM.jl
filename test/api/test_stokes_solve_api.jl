@@ -26,8 +26,8 @@ using FFCM: stokes_solve!
 end
 
 # Threaded plans execute as spawned Julia tasks, which allocate per call, so
-# the zero-allocation contract above is scoped to single-threaded plans
-# (spec/stokes-solve.md); the threaded path still must infer concretely.
+# the zero-allocation contract above is scoped to single-threaded plans;
+# the threaded path still must infer concretely.
 @testset "Threaded-plan Stokes solve stays type-stable" begin
     for T in (Float32, Float64)
         config = _standard_test_config(

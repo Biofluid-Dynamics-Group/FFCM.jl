@@ -1,11 +1,11 @@
 using Test
 using FFCM: wrap_positions!
 
-# The cuFCM reference implementation handles the upper-edge case explicitly
-# in `images()` (CUFCM_DATA.cu): after the modulo fold, if x == L, it sets
-# x = 0. Our `wrap_positions!` reaches the same outcome through `mod(Y, L)`
-# alone, because `mod(L, L) == 0` for the floating-point types we support.
-# This test pins parity with the cuFCM behaviour at the upper boundary.
+# A position exactly on the open upper edge must fold to the lower edge:
+# the domain is [0, L), so x == L belongs to the image x = 0. `wrap_positions!`
+# reaches this through `mod(Y, L)` alone, because `mod(L, L) == 0` for the
+# floating-point types we support. This test pins that upper-boundary
+# behaviour on its own terms.
 @testset "Position on the upper boundary wraps to the lower edge" begin
     L = (4.0, 6.0, 8.0)
     Y = reshape(Float64[4.0, 6.0, 8.0], 3, 1)

@@ -19,7 +19,7 @@ const _STOKES_KWARGS = (;
 
 @testset "Viscosity μ is a required, positive cold-path parameter (paper §2)" begin
     # Paper writes the viscosity as η (§2 Stokes momentum balance); this
-    # package writes μ (see `spec/stokes-solve.md` notation note). The
+    # package writes μ. The
     # parameter is mandatory because viscosity is dimensionally meaningful
     # and a wrong default would silently scale every velocity in the
     # downstream mobility application.
@@ -119,7 +119,7 @@ end
 
 @testset "Mean velocity is exactly zero (k = 0 gauge fix)" begin
     # Periodic Stokes is undefined at k = 0; the mean velocity is gauge-
-    # fixed to zero (spec/stokes-solve.md > Mean-flow gauge fix). The
+    # fixed to zero. The
     # discrete identity Σ_x u(x) = û(k = 0) then implies that the sum of
     # each velocity component over the grid is zero to round-off,
     # regardless of whether the input force has zero mean (the gauge fix

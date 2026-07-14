@@ -8,7 +8,7 @@ using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!, _build_neig
 # where `CUDA.functional()` (guarded in runtests.jl). The GPU cell list is a
 # counting sort with a non-stable atomic scatter, so the intra-cell order of the
 # permutation is unspecified: per-cell ranges and per-particle hashes are compared
-# directly, the permutation by its partition invariants. See spec/particle-sorting.md.
+# directly, the permutation by its partition invariants.
 
 @testset "GPU periodic wrap matches the CPU backend" begin
     for T in (Float32, Float64)
@@ -124,8 +124,8 @@ end
     # The counting-sort prefix sum is allocation-free at this cell count
     # (single-block `accumulate!` scan). A large cell count takes CUDA.jl's
     # multi-block scan, which allocates a transient aggregate buffer — an
-    # allocation-free scan for large grids is a deferred follow-up
-    # (spec/cuda-conventions.md).
+    # allocation-free scan for large grids is a deferred, benchmark-gated
+    # follow-up.
     @test CUDA.@allocated(
         sort_particles_by_cell!(gpu, gpu.particles.Y_wrapped, Fd)
     ) == 0
