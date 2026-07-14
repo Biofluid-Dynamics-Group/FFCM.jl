@@ -102,3 +102,44 @@ CUDA runtime 11.8): `mobility!` Float32 wall time min 0.020196 s / mean
 with per-call staging included and before the deferred perf work (upload
 caching, device-array fast path, allocation-free large-grid scan). Float64:
 min 0.072509 s.
+
+## cuFFT library-vintage experiment (2026-07-14)
+
+Attribution experiment for the throughput gap above: is FFCM.jl's edge explained
+by its newer cuFFT (10.9.0.58, from the CUDA.jl 11.8 runtime artifact) versus the
+toolkit-11.2 cuFFT (10.4.0.72) the cuFCM binary links? Both ship the soname
+`libcufft.so.10`, and `ldd` shows it is the binary's **only** dynamic CUDA
+library (cudart is static), so an `LD_LIBRARY_PATH` override swaps exactly one
+variable:
+
+```
+libcufft.so.10 => /usr/local/cuda/targets/x86_64-linux/lib/libcufft.so.10   (A: baseline)
+libcufft.so.10 => <repo>/cuFCM/compare/cufft-11.8/libcufft.so.10            (B: artifact 10.9)
+```
+
+Same card, config, and seeded inputs as the baseline; four runs per precision
+interleaved A/B/A/B; per-step means over the binary's post-warmup repeats
+(Float32 ×50, Float64 ×5). Mean-B/mean-A ratios:
+
+| step | Float32 | Float64 |
+|---|---|---|
+| hashing (control) | 0.990 | 0.942 |
+| spreading (control) | 0.999 | 0.931 |
+| **FFT** | **1.015** | 0.957 |
+| gathering (control) | 0.997 | 0.948 |
+| correction (control) | 0.997 | 0.910 |
+| compute | 1.003 | 0.937 |
+
+**Outcome: the library-vintage hypothesis is refuted.** On Float32 — the
+precision where the 111.7 % headline was measured, with control steps tight at
+≤ 1 % — cuFFT 10.9 makes the binary's FFT **1.5 % slower**, not faster. The
+Float64 legs moved −4…−9 % *including every non-FFT control step*, which cannot
+be a cuFFT effect; at 5 repeats per run that is run-to-run/clock noise, not
+signal. Velocity drift under the swap is indistinguishable from the atomic
+nondeterminism floor (Float32: mean 1.4e-7 vs floor 1.5e-7; Float64: 3.9e-16 vs
+3.6e-16), so the two cuFFT versions are numerically interchangeable here.
+
+The remaining attribution hypotheses for FFCM.jl's kernel-level edge are, in
+order: codegen vintage (LLVM 18 + ptxas 11.8 versus nvcc 11.2 across every
+kernel) and monopole-specialized kernels (no runtime `rotation` argument or
+dipole register/shared-memory footprint).
