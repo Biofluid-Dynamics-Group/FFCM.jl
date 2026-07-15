@@ -24,7 +24,7 @@ mobility!(V, config, Y, F)   # Y, F: 3xN arrays; particles have unit radius
 with two backends:
 
 - **CPU**: lives entirely in `src/`.
-- **CUDA (for NVIDIA GPUs)**: lives in `ext/CUDAExt/` and loads as a package
+- **CUDA (for NVIDIA GPUs)**: lives in `ext/FFCMCUDAExt/` and loads as a package
   extension only when the user has `CUDA.jl` in their environment.
 
 The intended downstream use is a direct or iterative resistance solver that applies
@@ -36,18 +36,24 @@ allocation-free and the GPU backend hides host-device traffic from callers.
 1. **The paper is the spec.** Notation, equations, and parameter meanings
    in this codebase follow Su & Keaveny (2024) unless otherwise stated. The mapping between paper
    symbols and code identifiers lives in
-   [spec/notation.md](spec/notation.md).
+   [docs/src/notation.md](docs/src/notation.md).
 
-2. **`racksa/cuFCM` is a *reference* for implementation.** The
-   original C++/CUDA implementation of FFCM by the paper's author. You may
-   read it to learn orchestration tricks
-   for GPU. There is no specific need to copy the code exactly, but this repository aims to cover its functionality.
+2. **The port is self-contained.** The original C++/CUDA implementation by
+   the paper's authors (racksa/cuFCM) served as the implementation
+   reference for the GPU backend; numerical parity was validated
+   (2026-07-13) and shipped artefacts no longer cite it beyond the tracked
+   baseline record `benchmark/cufcm-baseline.md` and one acknowledgment
+   each in `README.md` and the developer docs (see §6).
 
-3. **`spec/` is the source of truth for *what the code does*.** The paper is the
-   source of truth for *why*; `spec/` cites the paper by section/equation
-   rather than restating derivations. No new public API or algorithmic
-   component is added without (a) an updated `spec/*.md` and (b) a failing
-   test that drove the implementation (see §5).
+3. **`docs/` and docstrings are the source of truth for *what the code
+   does*.** The paper is the source of truth for *why*. Contracts —
+   arguments, shapes, units, preconditions — live in `src/` docstrings;
+   method narrative lives in the Documenter pages under `docs/src/`,
+   citing the paper by section/equation rather than restating it. No new
+   public API or algorithmic component is added without (a) its contract
+   written into the docstring (plus a docs-page section where the method
+   warrants narrative) and (b) a failing test that drove the
+   implementation (see §5).
 
 4. **Hot-path code is allocation-free.** Any function reachable from
    `mobility!` after the `config` is built must not allocate on the heap.
@@ -70,7 +76,7 @@ allocation-free and the GPU backend hides host-device traffic from callers.
    test before it is considered done.
 
 7. **Every documented precondition is enforced.** If a docstring or
-   `spec/` contract states a precondition (`M_G ≥ 2`,
+   docs-page contract states a precondition (`M_G ≥ 2`,
    `M_G ≤ min(num_grid_points)`, `Y` is `3xN`, `R_c ≤ min(L)/2`), the
    cold-path constructor or the hot-path entry validates it. A
    precondition that the code relies on (especially anything guarded by
@@ -79,14 +85,15 @@ allocation-free and the GPU backend hides host-device traffic from callers.
    check-free.
 
 8. **Cite the published paper, by section/equation.** Shipped artefacts —
-   `src/` docstrings and `spec/` bodies — reference Su & Keaveny (2024),
-   *J. Comput. Phys.* 510, 113060 by section and numbered equation. A `spec/` file leads with a paper-math method summary a paper-literate,
-   Julia-naive reader can follow; types, performance notes, and cuFCM
-   comparisons live in an "Implementation notes" appendix at the end.
+   `src/` docstrings and `docs/` pages — reference Su & Keaveny (2024),
+   *J. Comput. Phys.* 510, 113060 by section and numbered equation. A
+   Method docs page leads with a paper-math summary a paper-literate,
+   Julia-naive reader can follow; types and performance notes live in the
+   Developer documentation section (`docs/src/devdocs/`) or as code
+   comments at the decision site.
 
 9. **Docstrings say what the function does.** A body that states the
-   function's job (with the paper citation and the `spec/*.md` pointer
-   where one exists), then `# Arguments` and `# Returns` sections
+   function's job (with the paper citation), then `# Arguments` and `# Returns` sections
    wherever possible — each entry gives at least the type and/or size
    plus any real contract (valid range, units, ordering). Type/size
    information lives in those sections, not in the body. No boilerplate
@@ -143,9 +150,9 @@ linear map, without a separate adapter at the call site.
 - For CUDA, hand-write `@cuda` kernels. Specific kernel-level choices
   (shared-memory tiling, atomics policy, register pressure) are
   benchmark-driven and live in
-  [spec/cuda-conventions.md](spec/cuda-conventions.md) as they are
-  validated. The only universal CUDA rule is the boundary one (§7): CUDA
-  appears in `ext/`, never in `src/`.
+  [docs/src/devdocs/gpu-architecture.md](docs/src/devdocs/gpu-architecture.md)
+  as they are validated. The only universal CUDA rule is the boundary one
+  (§7): CUDA appears in `ext/`, never in `src/`.
 - The benchmark suite in `benchmark/` is the regression detector. Run it
   before claiming a performance improvement.
 - **Type stability is strict.** No abstract types in struct fields; no
@@ -158,7 +165,8 @@ linear map, without a separate adapter at the call site.
   the typed unit) while giving Struct-of-Arrays memory layout for
   SIMD-over-particles. Flat-vector adapters live at LinAlg API
   boundaries (e.g. `mul!`). Specific layout choices and the cost of any
-  AoS↔SoA shuffles belong in the relevant `spec/*.md` file.
+  AoS↔SoA shuffles belong in the Developer documentation
+  (`docs/src/devdocs/`).
 - **SciML performance practices**
   (<https://github.com/SciML/SciMLStyle>) apply where this section does
   not already cover them: function barriers around unavoidable type
@@ -171,7 +179,10 @@ linear map, without a separate adapter at the call site.
 
 **Order of operations for any new public API** (TDD):
 
-1. Spec stub in `spec/` describing the contract.
+1. Contract first: write the docstring of the new or changed public symbol
+   — its job, `# Arguments`, `# Returns`, and preconditions — and, for a
+   new algorithmic component, a stub section on the relevant docs page.
+   The contract is written before the implementation exists.
 2. A **failing** test pinning the behavior — typically an analytical case
    (single-sphere Stokes drag, periodic two-sphere pair, a known
    reference sum) asserted at `sqrt(eps(T))` tolerance.
@@ -193,30 +204,22 @@ shared fixtures in `test_utilities.jl` stay at the top level):
 - `hygiene/` — whole-package audits: **Aqua.jl** (method ambiguities,
   unbound type parameters, stale `[deps]`), **JET.jl** call-graph
   inference, and the exported-surface check.
-- `cuda/` — CPU↔CUDA parity tests; added when the CUDA backend lands,
-  only run when CUDA is loadable.
+- `cuda/` — CPU↔CUDA parity tests; only run when a functional CUDA
+  device is available.
 
 `Aqua.jl` audits package hygiene; **JET.jl** audits dispatch and
 inference. Both are test dependencies.
 
-## 6. What to mine from cuFCM
+## 6. Reference implementation (dev-only)
 
-The C++/CUDA reference is at <https://github.com/racksa/cuFCM>. Files
-worth reading (and what to take from each):
-
-- `src/CUFCM_FCM.cuh`: the active implementations of each sub-algorithm
-  are uncommented; alternative or dead variants nearby are commented out
-  and should be ignored.
-- `src/CUFCM_FCM.cu`: spreading and interpolation kernel structure. Look
-  at how it tiles per particle and uses shared memory for the local grid
-  patch.
-- `src/CUFCM_CELLLIST.cu`: GPU cell list build / lookup pattern.
-- `src/CUFCM_CORRECTION.cu`: real-space pairwise correction layout.
-- `src/CUFCM_SOLVER.cu`: orchestration — how FFT, spreading, correction,
-  and interpolation are sequenced and what stays on device.
-
-**Do not** copy their identifiers (`σ` is called something else there),
-file names, or class layout into our code.
+The C++/CUDA reference this package was validated against is the paper
+authors' racksa/cuFCM (<https://github.com/racksa/cuFCM>). The port is
+complete and parity-validated; a gitignored clone may sit at `cuFCM/` for
+dev-only benchmarking experiments. Do not cite it, its identifiers, or
+its file names from shipped artefacts. The tracked record of its measured
+performance is `benchmark/cufcm-baseline.md`, and the sanctioned
+acknowledgments are one line each in `README.md` and
+`docs/src/devdocs/gpu-architecture.md`.
 
 ## 7. Don'ts
 
@@ -224,13 +227,14 @@ file names, or class layout into our code.
 - Don't half-implement: a function either does its documented job and
   has a passing test, or it `error("not yet implemented")`s.
 - Don't import CUDA from `src/`. CUDA only appears in `ext/`.
-- Don't add a new public API symbol without a `spec/` document and a
-  failing test that drove the implementation (§5).
+- Don't add a new public API symbol without its documented contract
+  (docstring, plus a docs-page section where warranted) and a failing
+  test that drove the implementation (§5).
 - Don't generate docs that claim functionality that isn't tested.
 - Don't reference CLAUDE.md or any other agent/process file (plan files,
-  changelogs, local instructions) from `src/`, `test/`, or `spec/`.
-  Shipped artefacts cite the paper or `spec/`; the code stands on its
-  own.
+  changelogs, local instructions) from `src/`, `test/`, or `docs/`.
+  Shipped artefacts cite the paper or the package docs; the code stands
+  on its own.
 
 ## 8. Style
 

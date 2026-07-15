@@ -13,6 +13,12 @@ their resulting velocities $\left(\boldsymbol{V}_n\right) _{n = 1}^N$ considerin
 
 This package currently _only_ implements the linear force-velocity relationship for each sphere.
 
+## Documentation
+
+The full documentation — the method narrative with paper citations, the GPU and
+performance guides, the API reference, and the developer documentation — is at
+<https://biofluid-dynamics-group.github.io/FFCM.jl/dev/>.
+
 ## Usage
 
 The package provides three objects for plug-and-play usage of the method. `FFCMConfig` provides
@@ -47,10 +53,10 @@ config = FFCMConfig(
     L = (L_x, L_y, L_z),
     R_c = R_c,
     N = N,
-    kernel_widths_ratio = Σ_over_σ,
+    kernel_widths_ratio = kernel_widths_ratio,
     viscosity = μ,
     num_grid_points = (num_points, num_points, num_points),
-    M_G = M_G
+    M_G = M_G,
 )
 
 V = zeros(T, 3, N)  # Target array for velocities, size 3xN of type T
@@ -65,17 +71,57 @@ The first mobility call after loading the package will trigger compilation, but 
 ## Parameter optimisation
 
 The method has three parameters:
-- $\Sigma/\sigma$
-- $R_c$
-- $M_G$
+- $\Sigma/\sigma$ (`kernel_widths_ratio`)
+- $R_c$ (`R_c`)
+- $M_G$ (`M_G`)
 
 _Helpers to calibrate the method parameters to target hardware are planned and not yet available._
 
 ## GPU acceleration
 
-If CUDA.jl is available...
+A GPU parallel implementation that follows the paper authors' reference CUDA
+implementation, [cuFCM](https://github.com/racksa/cuFCM), is available as a package
+extension dependent on [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl).
 
-cuFCM serves as the original CUDA implementation of the method and is used as a reference.
+First, select a GPU by setting a single integer as the `CUDA_VISIBLE_DEVICES` environment
+variable in your terminal:
+```bash
+export CUDA_VISIBLE_DEVICES=<index>
+```
+
+> On one of Imperial College London's Mathematics Deparment NVIDIA clusters, you can check on the
+> available cards using 
+> ```bash
+> gpustat
+> ```
+> and then pin the `<index>` of whichever NVIDIA card is available to `CUDA_VISIBLE_DEVICES`.
+
+If a single card set in `CUDA_VISIBLE_DEVICES` and [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl)
+is available in your environment, loading it alongside FFCM and
+adding `gpu_acceleration = true` to the config constructor will trigger the parallel algorithm:
+
+```julia
+using CUDA
+using FFCM
+
+config = FFCMConfig(
+    L = (L_x, L_y, L_z),
+    R_c = R_c,
+    N = N,
+    kernel_widths_ratio = kernel_widths_ratio,
+    viscosity = μ,
+    num_grid_points = (num_points, num_points, num_points),
+    M_G = M_G,
+    gpu_acceleration = true,
+)
+```
+
+Everything else is unchanged: `mobility!` and `FFCMMobility` take and return ordinary host
+arrays, and the whole pipeline runs resident on the device (the host-device traffic is
+handled internally). `Float32` is the intended GPU precision; `Float64` works but emits a
+warning, since consumer NVIDIA cards run double precision at a small fraction of
+single-precision throughput. For the same inputs, the GPU backend reproduces the CPU
+backend's velocities to round-off.
 
 ## LLM assistance
 
@@ -83,4 +129,4 @@ This repository was written with assistance of `claude-5-fable`, `claude-4.8-opu
 
 ## Contributing
 
-Contributions are welcome! A general guide for contribution to scientific Julia packages is available by the SciML community as [ColPrac](https://github.com/SciML/ColPrac). We additionally ask to disclose any use of LLM assistance in coding for transparency.
+Contributions are welcome! A general guide for contribution to scientific Julia packages is available by the SciML community as [ColPrac](https://github.com/SciML/ColPrac). We additionally ask to disclose any use of LLM assistance in coding for transparency, and pull requests to be submitted by humans.
