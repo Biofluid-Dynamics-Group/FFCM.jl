@@ -1,0 +1,37 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  statuses: write
+  actions: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v2
+      # The repo uses the Julia [workspace] layout with a gitignored shared
+      # Manifest: instantiating the docs member resolves the whole workspace
+      # into a fresh shared Manifest at the repo root, and FFCM itself is
+      # provided to the docs project by the workspace, so the unregistered
+      # package needs no Pkg.develop.
+      - name: Instantiate the docs environment
+        run: julia --color=yes --project=docs -e 'using Pkg; Pkg.instantiate()'
+      - name: Build and deploy the documentation
+        run: julia --color=yes --project=docs docs/make.jl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
