@@ -15,13 +15,12 @@ radius ``a = 1`` located at ``\boldsymbol{Y}_n`` with forces
 
 ## Installation
 
-The package is not yet registered. Until then, add it from a clone:
+FFCM is registered in the Julia General registry: from the Julia REPL, enter
+package mode with `]` and run
 
 ```julia-repl
-pkg> dev path/to/FFCM.jl
+pkg> add FFCM
 ```
-
-or directly from its repository URL with `pkg> add <repository URL>`.
 
 ## Usage
 

@@ -1,5 +1,12 @@
 # FFCM.jl
 
+[![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://biofluid-dynamics-group.github.io/FFCM.jl/stable/)
+[![Dev docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://biofluid-dynamics-group.github.io/FFCM.jl/dev/)
+[![CI](https://github.com/Biofluid-Dynamics-Group/FFCM.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Biofluid-Dynamics-Group/FFCM.jl/actions/workflows/CI.yml)
+[![Coverage](https://codecov.io/gh/Biofluid-Dynamics-Group/FFCM.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/Biofluid-Dynamics-Group/FFCM.jl)
+[![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
+[![JET](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl)
+
 Julia implementation of the Fast Force-Coupling Method (FFCM) ([Su & Keaveny (2024), *Accelerating the
 force-coupling method for hydrodynamic interactions in periodic
 domains*, J. Comput. Phys. **510**, 113060](https://www.sciencedirect.com/science/article/pii/S0021999124003097)), for
@@ -8,16 +15,19 @@ Stokes flow.
 
 FFCM is a numerical approximation to the mobility tensor of a collection of identical spherical rigid particles
 suspended in a fluid that obeys the Stokes equation with periodic boundary conditions. Given $N$ spherical particles of radius $a=1$ located at $\left(\boldsymbol{Y}_n\right) _{n = 1}^N \subset \Omega$
-with forces $\left(\boldsymbol{F}_n\right) _{n = 1}^N$ acting on them, FFCM computes
+with forces $\left(\boldsymbol{F}_n\right) _{n = 1}^N$ acting on them, where $\Omega \cong \mathbb{T}^3$, FFCM computes
 their resulting velocities $\left(\boldsymbol{V}_n\right) _{n = 1}^N$ considering hydrodynamic interactions.
 
 This package currently _only_ implements the linear force-velocity relationship for each sphere.
 
-## Documentation
+## Installation
 
-The full documentation — the method narrative with paper citations, the GPU and
-performance guides, the API reference, and the developer documentation — is at
-<https://biofluid-dynamics-group.github.io/FFCM.jl/dev/>.
+FFCM is registered in the Julia General registry: from the Julia REPL, enter
+package mode with `]` and run
+
+```julia-repl
+pkg> add FFCM
+```
 
 ## Usage
 
@@ -88,6 +98,9 @@ variable in your terminal:
 ```bash
 export CUDA_VISIBLE_DEVICES=<index>
 ```
+
+On Windows, set the same variable in PowerShell (`$env:CUDA_VISIBLE_DEVICES = "<index>"`)
+or use WSL2 — the GPU backend does not require a Unix shell.
 
 > On one of Imperial College London's Mathematics Deparment NVIDIA clusters, you can check on the
 > available cards using 
