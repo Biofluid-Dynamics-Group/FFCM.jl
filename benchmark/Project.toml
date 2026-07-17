@@ -3,3 +3,6 @@ BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 FFCM = "7a5e5976-cca4-4592-9cc6-b4f5aae2794e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[compat]
+BenchmarkTools = "1.8.0"
