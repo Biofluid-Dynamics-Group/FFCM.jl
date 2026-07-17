@@ -143,3 +143,6 @@ The remaining attribution hypotheses for FFCM.jl's kernel-level edge are, in
 order: codegen vintage (LLVM 18 + ptxas 11.8 versus nvcc 11.2 across every
 kernel) and monopole-specialized kernels (no runtime `rotation` argument or
 dipole register/shared-memory footprint).
+
+A correct benchmark will also go through 50 repeats in Float32 to warmup the card, and
+this gates an actual performance test against cuFCM. These numbers are only initial.
