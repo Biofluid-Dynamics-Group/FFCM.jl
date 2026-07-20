@@ -3,7 +3,6 @@
 [![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://biofluid-dynamics-group.github.io/FFCM.jl/stable/)
 [![Dev docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://biofluid-dynamics-group.github.io/FFCM.jl/dev/)
 [![CI](https://github.com/Biofluid-Dynamics-Group/FFCM.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Biofluid-Dynamics-Group/FFCM.jl/actions/workflows/CI.yml)
-[![Coverage](https://codecov.io/gh/Biofluid-Dynamics-Group/FFCM.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/Biofluid-Dynamics-Group/FFCM.jl)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![JET](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl)
 
