@@ -19,11 +19,11 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v2
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1.12'
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       # The repo uses the Julia [workspace] layout with a gitignored shared
       # Manifest: instantiating the docs member resolves the whole workspace
       # into a fresh shared Manifest at the repo root, and FFCM itself is

@@ -5,21 +5,18 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    # To group all GitHub Actions updates into a single PR, uncomment the following:
-    # groups:
-    #   github-actions:
-    #     patterns:
-    #       - "*"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+  # The julia scan is workspace-aware: scanning the repository root resolves
+  # the whole [workspace] and proposes edits to member Project.tomls, so a
+  # single root directory covers test/, docs/, and benchmark/ too.
   - package-ecosystem: "julia"
-    directories:
-      - "/"
-      - "/docs"
-      - "/test"
-      - "/benchmark"
+    directory: "/"
     schedule:
       interval: "weekly"
-    # To group all Julia dependency updates into a single PR, uncomment the following:
-    # groups:
-    #   julia-dependencies:
-    #     patterns:
-    #       - "*"
+    groups:
+      julia-dependencies:
+        patterns:
+          - "*"
