@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: _self_correction, _correction_scalars,
+using ForceCouplingMethod
+using ForceCouplingMethod: _self_correction, _correction_scalars,
     wrap_positions!, assign_cells!, sort_particles_by_cell!, correct_velocities!
 using StaticArrays: SVector, SMatrix
 using LinearAlgebra: I, norm, dot

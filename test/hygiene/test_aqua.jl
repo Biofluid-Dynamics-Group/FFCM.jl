@@ -1,7 +1,7 @@
 using Test
 using Aqua
-using FFCM
+using ForceCouplingMethod
 
 @testset "Aqua: package hygiene" begin
-    Aqua.test_all(FFCM)
+    Aqua.test_all(ForceCouplingMethod)
 end

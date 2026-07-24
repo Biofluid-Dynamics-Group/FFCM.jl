@@ -1,9 +1,9 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using Random: Xoshiro
 using StructArrays: components
-using FFCM: stokes_solve!
+using ForceCouplingMethod: stokes_solve!
 
 # CPU↔CUDA parity for pipeline step 4 (the Fourier-space Stokes solve). Runs only where
 # `CUDA.functional()` (guarded in runtests.jl). `stokes_solve!` is backend-agnostic: its

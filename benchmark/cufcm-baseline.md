@@ -3,11 +3,11 @@
 A one-time timing record of **cuFCM** — the paper authors' reference CUDA
 implementation (<https://github.com/racksa/cuFCM>; Su & Keaveny 2024, *J. Comput.
 Phys.* 510, 113060, §5–6) — taken on the same card and configuration used to
-cross-validate FFCM.jl's GPU backend. It preserves the setup and the numbers so
+cross-validate ForceCouplingMethod.jl's GPU backend. It preserves the setup and the numbers so
 future `cuda/` benchmark leaves can be compared against the reference without
 keeping a cuFCM checkout around.
 
-At the time of measurement, FFCM.jl reproduced cuFCM's velocities on identical
+At the time of measurement, ForceCouplingMethod.jl reproduced cuFCM's velocities on identical
 inputs to round-off (Float64 mean per-particle relative error 3.1e-15, Float32
 3.1e-6), so these timings are a like-for-like anchor for the configuration below,
 not merely a similar workload.
@@ -53,7 +53,7 @@ for exact reproduction:
 | `boxsize` | L | 250 |
 | `rh` | a | 1 |
 
-The equivalent FFCM.jl construction (what a future `cuda/` leaf should time):
+The equivalent ForceCouplingMethod.jl construction (what a future `cuda/` leaf should time):
 
 ```julia
 config = FFCMConfig(;
@@ -90,11 +90,11 @@ Measurement semantics, needed for honest comparison:
   its repeat loop.
 - cuFCM's headline metric is PTPS = N / compute: **8.63e6** (Float32),
   2.04e6 (Float64 — Turing runs FP64 at 1/32 rate).
-- The like-for-like target for FFCM.jl's `mobility!` (which re-hashes and stages
+- The like-for-like target for ForceCouplingMethod.jl's `mobility!` (which re-hashes and stages
   Y/F/V on every call) is **hashing + compute = 0.022561 s** (Float32), i.e.
   PTPS 8.27e6.
 
-## FFCM.jl standing at measurement time (context)
+## ForceCouplingMethod.jl standing at measurement time (context)
 
 Measured the same day, same card, same inputs (Julia 1.12.6, CUDA.jl 5.8.5,
 CUDA runtime 11.8): `mobility!` Float32 wall time min 0.020196 s / mean
@@ -105,7 +105,7 @@ min 0.072509 s.
 
 ## cuFFT library-vintage experiment (2026-07-14)
 
-Attribution experiment for the throughput gap above: is FFCM.jl's edge explained
+Attribution experiment for the throughput gap above: is ForceCouplingMethod.jl's edge explained
 by its newer cuFFT (10.9.0.58, from the CUDA.jl 11.8 runtime artifact) versus the
 toolkit-11.2 cuFFT (10.4.0.72) the cuFCM binary links? Both ship the soname
 `libcufft.so.10`, and `ldd` shows it is the binary's **only** dynamic CUDA
@@ -139,7 +139,7 @@ signal. Velocity drift under the swap is indistinguishable from the atomic
 nondeterminism floor (Float32: mean 1.4e-7 vs floor 1.5e-7; Float64: 3.9e-16 vs
 3.6e-16), so the two cuFFT versions are numerically interchangeable here.
 
-The remaining attribution hypotheses for FFCM.jl's kernel-level edge are, in
+The remaining attribution hypotheses for ForceCouplingMethod.jl's kernel-level edge are, in
 order: codegen vintage (LLVM 18 + ptxas 11.8 versus nvcc 11.2 across every
 kernel) and monopole-specialized kernels (no runtime `rotation` argument or
 dipole register/shared-memory footprint).

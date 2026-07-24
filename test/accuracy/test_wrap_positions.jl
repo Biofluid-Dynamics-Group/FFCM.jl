@@ -1,5 +1,5 @@
 using Test
-using FFCM: wrap_positions!
+using ForceCouplingMethod: wrap_positions!
 
 # A position exactly on the open upper edge must fold to the lower edge:
 # the domain is [0, L), so x == L belongs to the image x = 0. `wrap_positions!`

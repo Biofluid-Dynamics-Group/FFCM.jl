@@ -1,7 +1,7 @@
-module FFCMCUDAExt
+module ForceCouplingMethodCUDAExt
 
 # CUDA backend of the Fast FCM mobility operator (Su & Keaveny 2024, §3 and §4).
-# Loaded automatically when a user runs `using CUDA` alongside `using FFCM`,
+# Loaded automatically when a user runs `using CUDA` alongside `using ForceCouplingMethod`,
 # through the package's `[weakdeps]`/`[extensions]` tables. This is the only place
 # CUDA appears; `src` stays free of it.
 #
@@ -9,13 +9,13 @@ module FFCMCUDAExt
 # `config.jl` builds the device buffers and cuFFT plans; `cell_list.jl` holds the
 # step-1 device kernels (wrap, hash, counting sort, gather).
 
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using LinearAlgebra: dot
 using StaticArrays: SVector
 using StructArrays: StructArray, components
 
-import FFCM:
+import ForceCouplingMethod:
     _apply_inverse_stokes_kernel!,
     _assemble_gpu_buffers,
     _assign_cells_kernel!,
@@ -40,4 +40,4 @@ include("interpolate.jl")
 include("correct_velocities.jl")
 include("mobility.jl")
 
-end # module FFCMCUDAExt
+end # module ForceCouplingMethodCUDAExt

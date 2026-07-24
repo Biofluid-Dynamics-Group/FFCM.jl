@@ -1,6 +1,6 @@
 using Test
 using Random: Xoshiro
-using FFCM
+using ForceCouplingMethod
 using LinearAlgebra: dot
 
 # Seeded property tests: the operator identities that define M^VF — linearity

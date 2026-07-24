@@ -45,7 +45,7 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 
 `CUDA_VISIBLE_DEVICES` is a CUDA driver feature that masks every other GPU, so the
 process physically cannot allocate on them and the pinned card appears as device 0
-(CUDA.jl honors it natively — no FFCM.jl code selects a device). The suite prints
+(CUDA.jl honors it natively — no ForceCouplingMethod.jl code selects a device). The suite prints
 the selected card (name + free memory) before the GPU tests; if it reports several
 GPUs visible and none pinned, it skips the GPU tests and prints this recipe. The
 backend-selection test (`test_gpu_backend_selection.jl`) needs no device and always
@@ -88,7 +88,7 @@ call) cannot do.
   remaining in optimized code. Runtime dispatch usually allocates, so this
   is the static counterpart of the `@ballocated == 0` guarantee. It runs on
   the hot path only — the cold constructor is allowed to be dynamic — and is
-  scoped with `target_modules = (FFCM,)` so FFTW internals do not produce
+  scoped with `target_modules = (ForceCouplingMethod,)` so FFTW internals do not produce
   foreign noise.
 
 **Aqua.jl** (`Aqua.test_all`) audits package hygiene: stale `[deps]`, method

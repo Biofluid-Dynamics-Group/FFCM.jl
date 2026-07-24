@@ -1,4 +1,4 @@
-# FFCM.jl benchmark suite
+# ForceCouplingMethod.jl benchmark suite
 
 The regression detector for the FFCM mobility pipeline: no performance-related
 change ships without a before/after measurement from this suite. Timings are
@@ -98,5 +98,5 @@ absolute thresholds.
 
 [`cufcm-baseline.md`](cufcm-baseline.md) records a one-time measurement of
 cuFCM — the paper authors' reference CUDA implementation — on an RTX 2080 Ti,
-together with the exact configuration and its FFCM.jl equivalent. Future
+together with the exact configuration and its ForceCouplingMethod.jl equivalent. Future
 `cuda/` leaves at that configuration can be compared against it directly.

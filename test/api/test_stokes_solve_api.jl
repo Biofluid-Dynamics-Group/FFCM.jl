@@ -1,7 +1,7 @@
 using Test
 using BenchmarkTools
-using FFCM
-using FFCM: stokes_solve!
+using ForceCouplingMethod
+using ForceCouplingMethod: stokes_solve!
 
 # Type stability and zero allocation are load-bearing for the hot path: an
 # abstract return type would force dynamic dispatch, and a single heap

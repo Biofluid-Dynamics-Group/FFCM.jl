@@ -1,4 +1,4 @@
-# FFCM.jl
+# ForceCouplingMethod.jl
 
 Julia implementation of the Fast Force-Coupling Method (FFCM) of
 [Su & Keaveny (2024), *Accelerating the force-coupling method for hydrodynamic
@@ -15,11 +15,11 @@ radius ``a = 1`` located at ``\boldsymbol{Y}_n`` with forces
 
 ## Installation
 
-FFCM is registered in the Julia General registry: from the Julia REPL, enter
+ForceCouplingMethod.jl is registered in the Julia General registry: from the Julia REPL, enter
 package mode with `]` and run
 
 ```julia-repl
-pkg> add FFCM
+pkg> add ForceCouplingMethod
 ```
 
 ## Usage
@@ -34,7 +34,7 @@ function that acts on its first argument, populating it with the velocities
 given by the arguments (both interfaces share the same backend).
 
 ```julia
-using FFCM
+using ForceCouplingMethod
 
 T = Float32  # or Float64
 

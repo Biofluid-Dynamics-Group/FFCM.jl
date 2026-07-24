@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: stokes_solve!
+using ForceCouplingMethod
+using ForceCouplingMethod: stokes_solve!
 
 @testset "Threaded Stokes solve matches the single-thread reference" begin
     # FFTW executes a threaded plan by partitioning the transform across

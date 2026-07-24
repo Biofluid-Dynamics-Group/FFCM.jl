@@ -1,7 +1,7 @@
 using Test
 using BenchmarkTools
-using FFCM
-using FFCM: assign_cells!, wrap_positions!
+using ForceCouplingMethod
+using ForceCouplingMethod: assign_cells!, wrap_positions!
 
 # Type stability and zero allocation are load-bearing for the hot path: an
 # abstract return type would force dynamic dispatch, and a single heap

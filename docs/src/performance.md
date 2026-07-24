@@ -26,7 +26,8 @@ solution is independent of the planner effort to round-off.
 ## FFTW wisdom
 
 FFTW can cache planner results across sessions through its wisdom mechanism, with no
-FFCM involvement: call `FFTW.import_wisdom(path)` before constructing the configuration
+ForceCouplingMethod involvement: call `FFTW.import_wisdom(path)` before constructing the
+configuration
 and `FFTW.export_wisdom(path)` after. A wisdom-loaded construction gets measured-quality
 plans at `:estimate`-like planning cost.
 

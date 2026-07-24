@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: mobility!, FFCMMobility
+using ForceCouplingMethod
+using ForceCouplingMethod: mobility!, FFCMMobility
 using LinearAlgebra: mul!, dot, issymmetric, isposdef
 
 @testset "mobility! leaves the caller's positions and forces unmodified" begin

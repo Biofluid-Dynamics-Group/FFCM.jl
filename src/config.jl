@@ -453,9 +453,10 @@ end
 """
     _assemble_gpu_buffers(args...)
 
-Builds the GPU-backed sub-struct buffers and cuFFT plans. The concrete method is supplied by
-the `FFCMCUDAExt` extension; this fallback fires when `gpu_acceleration = true` is requested
-without `using CUDA` having loaded the extension, and reports that requirement.
+Builds the GPU-backed sub-struct buffers and cuFFT plans. The concrete method is supplied
+by the `ForceCouplingMethodCUDAExt` extension; this fallback fires when
+`gpu_acceleration = true` is requested without `using CUDA` having loaded the extension,
+and reports that requirement.
 """
 _assemble_gpu_buffers(args...) = throw(ArgumentError(
     "gpu_acceleration = true requires the CUDA backend; run `using CUDA` on a " *

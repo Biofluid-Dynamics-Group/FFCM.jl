@@ -8,10 +8,11 @@ using Test
     # `gpu_acceleration = true` must throw a clear `ArgumentError` when the CUDA
     # extension has not been loaded. The test session itself loads CUDA (for the
     # functional() guard), which provides the real assembly method and would mask
-    # this path, so the check runs in a subprocess that loads FFCM but not CUDA.
+    # this path, so the check runs in a subprocess that loads ForceCouplingMethod but
+    # not CUDA.
     @testset "errors clearly when the CUDA extension is not loaded" begin
         code = """
-        using FFCM
+        using ForceCouplingMethod
         L = (4.0, 6.0, 8.0)
         try
             FFCMConfig(;

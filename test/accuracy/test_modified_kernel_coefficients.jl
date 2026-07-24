@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: _modified_kernel_coefficients
+using ForceCouplingMethod
+using ForceCouplingMethod: _modified_kernel_coefficients
 
 # The modified FCM kernel (Su & Keaveny 2024, §3 equation (22)) is
 # (1 + (σ²−Σ²)/2 ⋅ Δ) Δ(x; Σ). Applying the Laplacian to the isotropic Gaussian

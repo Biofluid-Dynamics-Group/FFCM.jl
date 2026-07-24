@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: stokes_solve!, _apply_inverse_stokes_kernel!,
+using ForceCouplingMethod
+using ForceCouplingMethod: stokes_solve!, _apply_inverse_stokes_kernel!,
     spread_forces!, sort_particles_by_cell!, assign_cells!, wrap_positions!
 using LinearAlgebra: mul!
 using StaticArrays

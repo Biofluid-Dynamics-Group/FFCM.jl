@@ -1,7 +1,7 @@
 using Test
 using Random: Xoshiro
-using FFCM
-using FFCM: _build_cell_list_kernel!, _gather_particles_kernel!,
+using ForceCouplingMethod
+using ForceCouplingMethod: _build_cell_list_kernel!, _gather_particles_kernel!,
     sort_particles_by_cell!, wrap_positions!, assign_cells!
 
 @testset "Sorting orders particles by ascending cell index" begin

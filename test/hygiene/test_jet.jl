@@ -1,7 +1,7 @@
 using Test
 using JET
-using FFCM
-using FFCM: assign_cells!, wrap_positions!, sort_particles_by_cell!,
+using ForceCouplingMethod
+using ForceCouplingMethod: assign_cells!, wrap_positions!, sort_particles_by_cell!,
     spread_forces!, stokes_solve!, interpolate_velocities!,
     correct_velocities!, mobility!, FFCMMobility
 using LinearAlgebra: mul!
@@ -11,7 +11,7 @@ using LinearAlgebra: mul!
 # the full inferred call graph from each entry point. `@test_call` fails on
 # inference *errors* anywhere in the graph; `@test_opt` additionally fails on
 # any runtime dispatch surviving in optimized code — the stronger guarantee
-# the allocation-free hot path relies on. `target_modules = (FFCM,)` keeps
+# the allocation-free hot path relies on. `target_modules = (ForceCouplingMethod,)` keeps
 # the optimization audit scoped to this package's code (FFTW internals are
 # not ours to fix).
 
@@ -70,8 +70,8 @@ end
         M = FFCMMobility(config, Y)
         f = vec(F)
         v = zeros(T, 3N)
-        @test_opt target_modules = (FFCM,) mobility!(V, config, Y, F)
-        @test_opt target_modules = (FFCM,) mul!(v, M, f)
-        @test_opt target_modules = (FFCM,) mul!(v, M, f, T(2), T(0.5))
+        @test_opt target_modules = (ForceCouplingMethod,) mobility!(V, config, Y, F)
+        @test_opt target_modules = (ForceCouplingMethod,) mul!(v, M, f)
+        @test_opt target_modules = (ForceCouplingMethod,) mul!(v, M, f, T(2), T(0.5))
     end
 end

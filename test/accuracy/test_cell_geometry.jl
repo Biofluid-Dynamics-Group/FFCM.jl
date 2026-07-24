@@ -1,5 +1,5 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 
 @testset "Cell number computing matches the paper formula" begin
     L = (4.0, 6.0, 8.0)

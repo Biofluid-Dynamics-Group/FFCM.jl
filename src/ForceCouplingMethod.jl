@@ -1,4 +1,4 @@
-module FFCM
+module ForceCouplingMethod
 
 using StaticArrays: SVector
 using StructArrays: StructArray, components

@@ -8,7 +8,7 @@
 # copy.
 
 function _stage_mobility_io!(
-    particles::FFCM.ParticleBuffers{<:CuMatrix, <:CuMatrix}, Y, F, V,
+    particles::ForceCouplingMethod.ParticleBuffers{<:CuMatrix, <:CuMatrix}, Y, F, V,
 )
     copyto!(particles.Y_input, Y)
     copyto!(particles.F_input, F)
@@ -16,7 +16,7 @@ function _stage_mobility_io!(
 end
 
 function _retrieve_mobility_output!(
-    V, ::FFCM.ParticleBuffers{<:CuMatrix, <:CuMatrix}, V_staged,
+    V, ::ForceCouplingMethod.ParticleBuffers{<:CuMatrix, <:CuMatrix}, V_staged,
 )
     copyto!(V, V_staged)
     return V

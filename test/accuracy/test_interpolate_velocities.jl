@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: spread_forces!, stokes_solve!, interpolate_velocities!,
+using ForceCouplingMethod
+using ForceCouplingMethod: spread_forces!, stokes_solve!, interpolate_velocities!,
     wrap_positions!, assign_cells!, sort_particles_by_cell!
 using StaticArrays
 using StructArrays: components

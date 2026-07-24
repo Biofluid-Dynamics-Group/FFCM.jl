@@ -1,5 +1,5 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using LinearAlgebra: mul!
 using StructArrays: components

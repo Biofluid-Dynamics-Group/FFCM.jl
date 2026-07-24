@@ -1,5 +1,5 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 
 @testset "Self-mobility is independent of the Fourier planner effort" begin
     # FFTW's measuring planner levels execute candidate transforms on the grid

@@ -1,11 +1,11 @@
 using Documenter
-using FFCM
+using ForceCouplingMethod
 
 # `checkdocs = :exports`: the internal step functions carry docstrings surfaced
 # on the developer pages, but only the exported names are required to appear.
 makedocs(;
-    sitename = "FFCM.jl",
-    modules = [FFCM],
+    sitename = "ForceCouplingMethod.jl",
+    modules = [ForceCouplingMethod],
     pages = [
         "Home" => "index.md",
         "Method" => [
@@ -27,13 +27,13 @@ makedocs(;
     checkdocs = :exports,
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", nothing) == "true",
-        canonical = "https://biofluid-dynamics-group.github.io/FFCM.jl",
+        canonical = "https://biofluid-dynamics-group.github.io/ForceCouplingMethod.jl",
         edit_link = "main",
     ),
 )
 
 deploydocs(;
-    repo = "github.com/Biofluid-Dynamics-Group/FFCM.jl",
+    repo = "github.com/Biofluid-Dynamics-Group/ForceCouplingMethod.jl",
     devbranch = "main",
     push_preview = false,
 )

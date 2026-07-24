@@ -1,5 +1,5 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using LinearAlgebra: mul!
 
 # A terminal user must be able to type every name the public API requires, so
@@ -17,8 +17,8 @@ function _public_keyword_names()
         methods(FFCMConfig{Float64}),
         methods(mobility!),
         methods(FFCMMobility),
-        filter(m -> m.module === FFCM, collect(methods(mul!))),
-        filter(m -> m.module === FFCM, collect(methods(*))),
+        filter(m -> m.module === ForceCouplingMethod, collect(methods(mul!))),
+        filter(m -> m.module === ForceCouplingMethod, collect(methods(*))),
     )
     keyword_names = Symbol[]
     for method_list in method_lists, method in method_list
@@ -28,7 +28,7 @@ function _public_keyword_names()
 end
 
 @testset "Exported names are typeable in any terminal (ASCII)" begin
-    @test all(isascii ∘ String, names(FFCM))
+    @test all(isascii ∘ String, names(ForceCouplingMethod))
 end
 
 @testset "Public keyword arguments are typeable in any terminal (ASCII)" begin

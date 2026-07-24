@@ -1,8 +1,9 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using Random: Xoshiro
-using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!, _build_neighbor_map
+using ForceCouplingMethod:
+    wrap_positions!, assign_cells!, sort_particles_by_cell!, _build_neighbor_map
 
 # CPU↔CUDA parity for pipeline step 1 (spatial hashing + cell list). Runs only
 # where `CUDA.functional()` (guarded in runtests.jl). The GPU cell list is a

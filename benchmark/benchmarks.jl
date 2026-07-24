@@ -4,8 +4,8 @@
 
 using BenchmarkTools
 using Random: Xoshiro
-using FFCM
-using FFCM:
+using ForceCouplingMethod
+using ForceCouplingMethod:
     wrap_positions!,
     assign_cells!,
     sort_particles_by_cell!,

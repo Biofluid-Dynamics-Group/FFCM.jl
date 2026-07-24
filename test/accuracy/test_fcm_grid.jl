@@ -1,5 +1,5 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using StructArrays
 using StaticArrays
 

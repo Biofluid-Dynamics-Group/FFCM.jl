@@ -1,5 +1,5 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using Random: Xoshiro
 using LinearAlgebra: mul!

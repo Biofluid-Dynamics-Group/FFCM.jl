@@ -1,7 +1,7 @@
 using Test
 using BenchmarkTools
-using FFCM
-using FFCM: mobility!, FFCMMobility
+using ForceCouplingMethod
+using ForceCouplingMethod: mobility!, FFCMMobility
 using LinearAlgebra: mul!
 
 # Type stability and zero allocation are load-bearing for the hot path: an

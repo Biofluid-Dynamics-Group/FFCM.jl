@@ -26,9 +26,9 @@ jobs:
       - uses: julia-actions/cache@v3
       # The repo uses the Julia [workspace] layout with a gitignored shared
       # Manifest: instantiating the docs member resolves the whole workspace
-      # into a fresh shared Manifest at the repo root, and FFCM itself is
-      # provided to the docs project by the workspace, so the unregistered
-      # package needs no Pkg.develop.
+      # into a fresh shared Manifest at the repo root, and ForceCouplingMethod
+      # itself is provided to the docs project by the workspace, so the
+      # unregistered package needs no Pkg.develop.
       - name: Instantiate the docs environment
         run: julia --color=yes --project=docs -e 'using Pkg; Pkg.instantiate()'
       - name: Build and deploy the documentation

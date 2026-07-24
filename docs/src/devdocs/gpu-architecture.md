@@ -28,7 +28,7 @@ the cold-path buffer assembly, and is not stored.
 
 ## The extension boundary
 
-CUDA appears only in the `ext/FFCMCUDAExt` package extension, never in `src`. The
+CUDA appears only in the `ext/ForceCouplingMethodCUDAExt` package extension, never in `src`. The
 extension supplies the GPU buffer/plan assembly by adding a method to a function
 declared in `src` whose only `src` method throws an `ArgumentError` naming the
 requirement. That fallback has a useful inference consequence: when CUDA is not loaded,

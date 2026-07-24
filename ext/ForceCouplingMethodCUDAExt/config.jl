@@ -3,16 +3,18 @@
         neighbor_map_host) -> (cells, particles, grid, solver, stencil)
 
 Allocates the GPU-backed sub-struct buffers and the cuFFT plans, the device counterpart of
-`FFCM._assemble_cpu_buffers`. Adding this method to the `_assemble_gpu_buffers` function
-declared in `FFCM` is what makes `FFCMConfig(; …, gpu_acceleration = true)` build a
-GPU-backed configuration; without this extension loaded, only the throwing fallback exists.
+`ForceCouplingMethod._assemble_cpu_buffers`. Adding this method to the
+`_assemble_gpu_buffers` function declared in `ForceCouplingMethod` is what makes
+`FFCMConfig(; …, gpu_acceleration = true)` build a GPU-backed configuration; without this
+extension loaded, only the throwing fallback exists.
 
 The host-built `neighbor_map_host` (the half-shell neighbour map, geometry-only) is copied to
 the device and stored on `cells`; the CPU backend stores `nothing` there instead.
 
 # Returns
-- `Tuple` of `FFCM.CellBuffers`, `FFCM.ParticleBuffers`, `FFCM.GridBuffers`,
-  `FFCM.SolverState`, `FFCM.StencilBuffers`, all backed by `CuArray` and cuFFT plans.
+- `Tuple` of `ForceCouplingMethod.CellBuffers`, `ForceCouplingMethod.ParticleBuffers`,
+  `ForceCouplingMethod.GridBuffers`, `ForceCouplingMethod.SolverState`, and
+  `ForceCouplingMethod.StencilBuffers`, all backed by `CuArray` and cuFFT plans.
 """
 function _assemble_gpu_buffers(
     ::Type{T},
@@ -25,7 +27,7 @@ function _assemble_gpu_buffers(
     k_z::Vector{T},
     neighbor_map_host::Vector{Int32},
 ) where {T}
-    cells = FFCM.CellBuffers(
+    cells = ForceCouplingMethod.CellBuffers(
         CuVector{Int32}(undef, N),
         CuVector{Int32}(undef, N),
         CuVector{Int32}(undef, num_cells_total),
@@ -33,7 +35,7 @@ function _assemble_gpu_buffers(
         CuVector{Int32}(undef, num_cells_total),
         CuArray(neighbor_map_host),
     )
-    particles = FFCM.ParticleBuffers(
+    particles = ForceCouplingMethod.ParticleBuffers(
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),
         CuMatrix{T}(undef, 3, N),
@@ -52,7 +54,7 @@ function _assemble_gpu_buffers(
     ux = CuArray{T, 3}(undef, M_x, M_y, M_z)
     uy = CuArray{T, 3}(undef, M_x, M_y, M_z)
     uz = CuArray{T, 3}(undef, M_x, M_y, M_z)
-    grid = FFCM.GridBuffers(
+    grid = ForceCouplingMethod.GridBuffers(
         StructArray{SVector{3, T}}((fx, fy, fz)),
         StructArray{SVector{3, T}}((ux, uy, uz)),
     )
@@ -66,9 +68,9 @@ function _assemble_gpu_buffers(
     # cuFFT plans dispatch through the same `plan_rfft`/`plan_brfft` generics FFTW
     # extends. Unlike FFTW's measuring planner, cuFFT planning does not execute on
     # the buffers, so the buffers need no post-plan zeroing.
-    forward_fourier_transform = FFCM.plan_rfft(fx)
-    inverse_fourier_transform = FFCM.plan_brfft(fh_x, Int(M_x))
-    solver = FFCM.SolverState(
+    forward_fourier_transform = ForceCouplingMethod.plan_rfft(fx)
+    inverse_fourier_transform = ForceCouplingMethod.plan_brfft(fh_x, Int(M_x))
+    solver = ForceCouplingMethod.SolverState(
         fluid_hat,
         CuArray(k_x),
         CuArray(k_y),
@@ -77,7 +79,7 @@ function _assemble_gpu_buffers(
         inverse_fourier_transform,
     )
 
-    stencil = FFCM.StencilBuffers(
+    stencil = ForceCouplingMethod.StencilBuffers(
         StructArray{SVector{3, T}}((
             CuVector{T}(undef, M_G), CuVector{T}(undef, M_G), CuVector{T}(undef, M_G),
         )),

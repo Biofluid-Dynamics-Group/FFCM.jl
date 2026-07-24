@@ -1,7 +1,7 @@
 using Test
 using BenchmarkTools
-using FFCM
-using FFCM: correct_velocities!, wrap_positions!, assign_cells!,
+using ForceCouplingMethod
+using ForceCouplingMethod: correct_velocities!, wrap_positions!, assign_cells!,
     sort_particles_by_cell!
 
 # Type stability and zero allocation are load-bearing for the hot path: an

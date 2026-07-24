@@ -1,9 +1,9 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using Random: Xoshiro
 using StructArrays: components
-using FFCM: spread_forces!
+using ForceCouplingMethod: spread_forces!
 
 # CPU↔CUDA parity for pipeline step 3 (force spreading). Runs only where
 # `CUDA.functional()` (guarded in runtests.jl). The GPU kernel is a block-per-particle

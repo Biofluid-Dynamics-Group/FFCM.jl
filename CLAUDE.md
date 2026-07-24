@@ -1,11 +1,11 @@
-# CLAUDE.md — agent operating guide for FFCM.jl
+# CLAUDE.md — agent operating guide for ForceCouplingMethod.jl
 
 This file tells Claude (and any other coding agent) how to work on this
 repository.
 
 ## 1. What this package is
 
-FFCM.jl is a Julia implementation of the Fast Force-Coupling Method (FFCM)
+ForceCouplingMethod.jl is a Julia implementation of the Fast Force-Coupling Method (FFCM)
 for hydrodynamic interactions between rigid particles in a triply-periodic
 Stokes flow, following Su & Keaveny (2024), *J. Comput. Phys.* 510, 113060.
 
@@ -24,7 +24,7 @@ mobility!(V, config, Y, F)   # Y, F: 3xN arrays; particles have unit radius
 with two backends:
 
 - **CPU**: lives entirely in `src/`.
-- **CUDA (for NVIDIA GPUs)**: lives in `ext/FFCMCUDAExt/` and loads as a package
+- **CUDA (for NVIDIA GPUs)**: lives in `ext/ForceCouplingMethodCUDAExt/` and loads as a package
   extension only when the user has `CUDA.jl` in their environment.
 
 The intended downstream use is a direct or iterative resistance solver that applies
@@ -124,9 +124,9 @@ behind one cold constructor and one hot call.
 **Export only the public surface.** The module exports `FFCMConfig`,
 `mobility!`, and `FFCMMobility` — nothing else. The seven internal step
 functions (`spread_forces!`, `stokes_solve!`, …) stay reachable as
-`FFCM.spread_forces!` for tests and advanced use, but exporting them
+`ForceCouplingMethod.spread_forces!` for tests and advanced use, but exporting them
 would leak the internal decomposition and contradict the deep-module
-intent. Tests import them qualified (`using FFCM: spread_forces!`).
+intent. Tests import them qualified (`using ForceCouplingMethod: spread_forces!`).
 
 **Matrix-free `mul!` interface.** `config` plus `mobility!` together
 implement (or trivially adapt to via a thin operator wrapper that closes

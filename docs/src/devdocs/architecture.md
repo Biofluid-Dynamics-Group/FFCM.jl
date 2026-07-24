@@ -57,7 +57,7 @@ the constructor fully inferred on the CPU path.
 ## Step functions and function-barrier kernels
 
 Each pipeline step is a public-by-convention wrapper (reachable qualified, e.g.
-`FFCM.spread_forces!`, but deliberately not exported — exporting the decomposition would
+`ForceCouplingMethod.spread_forces!`, but deliberately not exported — exporting the decomposition would
 leak it) that reads the configuration and delegates to a *function-barrier kernel*
 taking naked buffers and scalars. The barrier gives the compiler a concrete-typed call
 to specialise and lets each kernel be exercised in isolation by the tests. The backend
@@ -102,16 +102,16 @@ changes must keep them green:
 The step wrappers and buffer sub-structs, in pipeline order:
 
 ```@docs
-FFCM.wrap_positions!
-FFCM.assign_cells!
-FFCM.sort_particles_by_cell!
-FFCM.spread_forces!
-FFCM.stokes_solve!
-FFCM.interpolate_velocities!
-FFCM.correct_velocities!
-FFCM.CellBuffers
-FFCM.ParticleBuffers
-FFCM.GridBuffers
-FFCM.SolverState
-FFCM.StencilBuffers
+ForceCouplingMethod.wrap_positions!
+ForceCouplingMethod.assign_cells!
+ForceCouplingMethod.sort_particles_by_cell!
+ForceCouplingMethod.spread_forces!
+ForceCouplingMethod.stokes_solve!
+ForceCouplingMethod.interpolate_velocities!
+ForceCouplingMethod.correct_velocities!
+ForceCouplingMethod.CellBuffers
+ForceCouplingMethod.ParticleBuffers
+ForceCouplingMethod.GridBuffers
+ForceCouplingMethod.SolverState
+ForceCouplingMethod.StencilBuffers
 ```

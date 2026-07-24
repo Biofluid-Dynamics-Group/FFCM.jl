@@ -1,6 +1,6 @@
 using Test
 using Random: Xoshiro
-using FFCM: _assign_cells_kernel!
+using ForceCouplingMethod: _assign_cells_kernel!
 
 @testset "Hash for a position in the origin cell is zero" begin
     # Cubic 4x4x4 grid: cell_size_i = 1, inv_cell_size_i = 1, m_i = 4.

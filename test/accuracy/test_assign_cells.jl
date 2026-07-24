@@ -1,7 +1,7 @@
 using Test
 using Random: Xoshiro
-using FFCM
-using FFCM: assign_cells!, _assign_cells_kernel!, wrap_positions!
+using ForceCouplingMethod
+using ForceCouplingMethod: assign_cells!, _assign_cells_kernel!, wrap_positions!
 
 @testset "assign_cells! agrees with the kernel called on the config fields" begin
     L = (4.0, 6.0, 8.0)

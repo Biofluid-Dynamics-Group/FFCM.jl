@@ -1,7 +1,7 @@
 # Shared helpers for the test suite. Included once by runtests.jl before any
 # test file, so every helper here is visible to all tests.
 
-using FFCM
+using ForceCouplingMethod
 
 # Absolute tolerance for quantities that should be ≈ 0, where a relative
 # tolerance is ill-defined: atol ≈ rtol/100 with rtol = sqrt(eps(T)).

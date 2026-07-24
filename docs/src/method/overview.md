@@ -1,6 +1,6 @@
 # The mobility operator
 
-FFCM.jl evaluates the mobility operator ``\mathcal{M}^{\mathcal{V}\mathcal{F}}`` of
+ForceCouplingMethod.jl evaluates the mobility operator ``\mathcal{M}^{\mathcal{V}\mathcal{F}}`` of
 Su & Keaveny (2024): the linear map taking the forces
 ``\mathcal{F} = (\boldsymbol{F}_n)_{n=1}^N`` on ``N`` unit-radius spheres at positions
 ``\mathcal{Y} = (\boldsymbol{Y}_n)_{n=1}^N`` to the velocities

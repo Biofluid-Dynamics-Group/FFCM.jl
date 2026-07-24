@@ -1,9 +1,9 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using Random: Xoshiro, shuffle
 using StructArrays: components
-using FFCM: interpolate_velocities!
+using ForceCouplingMethod: interpolate_velocities!
 
 # CPU↔CUDA parity for pipeline step 5 (velocity interpolation / gather). Runs only where
 # `CUDA.functional()` (guarded in runtests.jl). The GPU kernel is a block-per-particle

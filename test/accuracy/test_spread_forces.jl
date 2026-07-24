@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: spread_forces!, _spread_forces_kernel!
+using ForceCouplingMethod
+using ForceCouplingMethod: spread_forces!, _spread_forces_kernel!
 using StaticArrays
 using StructArrays: components
 

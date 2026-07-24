@@ -1,6 +1,6 @@
 using Test
-using FFCM
-using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!,
+using ForceCouplingMethod
+using ForceCouplingMethod: wrap_positions!, assign_cells!, sort_particles_by_cell!,
     spread_forces!, stokes_solve!, interpolate_velocities!, mobility!
 
 @testset "Single-sphere periodic self-mobility (end-to-end, all five steps)" begin

@@ -1,8 +1,9 @@
 using Test
-using FFCM
+using ForceCouplingMethod
 using CUDA
 using Random: Xoshiro
-using FFCM: wrap_positions!, assign_cells!, sort_particles_by_cell!, correct_velocities!
+using ForceCouplingMethod:
+    wrap_positions!, assign_cells!, sort_particles_by_cell!, correct_velocities!
 
 # CPU↔CUDA parity for pipeline step 6 (the real-space pairwise correction). Runs only where
 # `CUDA.functional()` (guarded in runtests.jl). The GPU kernel runs one thread per

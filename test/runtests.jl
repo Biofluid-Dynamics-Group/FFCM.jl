@@ -3,7 +3,7 @@ using CUDA
 
 include("test_utilities.jl")
 
-@testset "FFCM" begin
+@testset "ForceCouplingMethod" begin
     include("accuracy/test_cell_geometry.jl")
     include("accuracy/test_wrap_positions.jl")
     include("accuracy/test_assign_cells_kernel.jl")
