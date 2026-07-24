@@ -7,11 +7,11 @@ no GPU dependency unless you ask for one.
 
 ## Usage
 
-Load CUDA alongside FFCM and pass `gpu_acceleration = true` at construction:
+Load CUDA alongside ForceCouplingMethod and pass `gpu_acceleration = true` at construction:
 
 ```julia
 using CUDA
-using FFCM
+using ForceCouplingMethod
 
 config = FFCMConfig(;
     L = (250.0f0, 250.0f0, 250.0f0),
@@ -33,6 +33,25 @@ types — it is not stored as a flag, and [`mobility!`](@ref) contains no backen
 Everything else about the API is unchanged: the same [`FFCMConfig`](@ref) keywords, the
 same [`mobility!`](@ref) call, and the same [`FFCMMobility`](@ref) operator, which
 drives a GPU configuration through `mul!` exactly as it drives a CPU one.
+
+## Driver compatibility
+
+The GPU backend depends on [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl), whose supported
+NVIDIA drivers are independent of this package. `CUDA.functional()` returns `true` when the
+installed CUDA.jl is compatible with the machine's driver and the backend is ready to run.
+ForceCouplingMethod supports CUDA.jl `5.8`–`6.2`, and the package manager installs the
+newest compatible release by default; on older, CUDA 11-era drivers that newest series
+reports `CUDA.functional() == false` and [`mobility!`](@ref) cannot run on the device.
+
+If `using CUDA; CUDA.functional()` returns `false` and updating the driver is not an option,
+install an older CUDA.jl within the supported range and pin it in your `Manifest.toml`:
+
+```julia-repl
+pkg> add CUDA@5.8.5
+pkg> pin CUDA
+```
+
+See the [CUDA.jl documentation](https://cuda.juliagpu.org) for the driver-to-version matrix.
 
 ## What to expect
 

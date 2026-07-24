@@ -1,8 +1,8 @@
-# FFCM.jl
+# ForceCouplingMethod.jl
 
-[![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://biofluid-dynamics-group.github.io/FFCM.jl/stable/)
-[![Dev docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://biofluid-dynamics-group.github.io/FFCM.jl/dev/)
-[![CI](https://github.com/Biofluid-Dynamics-Group/FFCM.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Biofluid-Dynamics-Group/FFCM.jl/actions/workflows/CI.yml)
+[![Stable docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://biofluid-dynamics-group.github.io/ForceCouplingMethod.jl/stable/)
+[![Dev docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://biofluid-dynamics-group.github.io/ForceCouplingMethod.jl/dev/)
+[![CI](https://github.com/Biofluid-Dynamics-Group/ForceCouplingMethod.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Biofluid-Dynamics-Group/ForceCouplingMethod.jl/actions/workflows/CI.yml)
 [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![JET](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl)
 
@@ -21,11 +21,11 @@ This package currently _only_ implements the linear force-velocity relationship 
 
 ## Installation
 
-FFCM is registered in the Julia General registry: from the Julia REPL, enter
+ForceCouplingMethod.jl is registered in the Julia General registry: from the Julia REPL, enter
 package mode with `]` and run
 
 ```julia-repl
-pkg> add FFCM
+pkg> add ForceCouplingMethod
 ```
 
 ## Usage
@@ -38,7 +38,7 @@ numerical parameters (spectral method grid, local stencil size, method parameter
 velocities given by the arguments (both interfaces share the same backend).
 
 ```julia
-using FFCM
+using ForceCouplingMethod
 
 T = Float32  # or Float64
 
@@ -101,7 +101,7 @@ export CUDA_VISIBLE_DEVICES=<index>
 On Windows, set the same variable in PowerShell (`$env:CUDA_VISIBLE_DEVICES = "<index>"`)
 or use WSL2 — the GPU backend does not require a Unix shell.
 
-> On one of Imperial College London's Mathematics Deparment NVIDIA clusters, you can check on the
+> On one of Imperial College London's Mathematics Deparment NVIDIA clusters, where this package was tested, you can check on the
 > available cards using 
 > ```bash
 > gpustat
@@ -109,12 +109,12 @@ or use WSL2 — the GPU backend does not require a Unix shell.
 > and then pin the `<index>` of whichever NVIDIA card is available to `CUDA_VISIBLE_DEVICES`.
 
 If a single card set in `CUDA_VISIBLE_DEVICES` and [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl)
-is available in your environment, loading it alongside FFCM and
+is available in your environment, loading it alongside ForceCouplingMethod and
 adding `gpu_acceleration = true` to the config constructor will trigger the parallel algorithm:
 
 ```julia
 using CUDA
-using FFCM
+using ForceCouplingMethod
 
 config = FFCMConfig(
     L = (L_x, L_y, L_z),
@@ -134,6 +134,24 @@ handled internally). `Float32` is the intended GPU precision; `Float64` works bu
 warning, since consumer NVIDIA cards run double precision at a small fraction of
 single-precision throughput. For the same inputs, the GPU backend reproduces the CPU
 backend's velocities to round-off.
+
+### Driver compatibility
+
+[CUDA.jl](https://github.com/JuliaGPU/CUDA.jl) supports various NVIDIA drivers, but in order for
+the code to run, the CUDA.jl version needs to match the driver on the card that you want to use.
+CUDA.jl provides the function `CUDA.functional()` that returns `true` if the installation is compatible
+with the current hardware and drivers and the code is ready to run. `ForceCouplingMethod` supports CUDA.jl `5.8`-`6.2`, and the
+package manager installs the newest by default. On older drivers the newest
+series would report `CUDA.functional() == false` and the GPU backend would not be able to be used.
+
+If `using CUDA; CUDA.functional()` returns `false` on your machine, the issue might be a version-driver
+mismatch. If updating the drivers isn't a possibility at the moment, installing an older CUDA.jl version and pinning it in your `Manifest.toml` might help. This looks something like
+```julia-repl
+pkg> add CUDA@5.8.5
+pkg> pin CUDA
+```
+in the Julia REPL package mode. See the
+[CUDA.jl documentation](https://cuda.juliagpu.org) for version-driver compatibility.
 
 ## LLM assistance
 
